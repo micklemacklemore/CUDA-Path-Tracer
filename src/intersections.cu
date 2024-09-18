@@ -1,3 +1,5 @@
+#include <device_launch_parameters.h>
+
 #include "intersections.h"
 
 __host__ __device__ float boxIntersectionTest(

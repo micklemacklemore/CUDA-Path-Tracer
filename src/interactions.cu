@@ -1,3 +1,5 @@
+#include <device_launch_parameters.h>
+
 #include "interactions.h"
 
 __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(
