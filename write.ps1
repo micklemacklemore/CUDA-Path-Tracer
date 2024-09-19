@@ -32,7 +32,9 @@ if (Test-Path -Path $fullFilePath) {
     # Create the file with the current date and write the date as the heading
     New-Item -Path $fullFilePath -ItemType File -Force
     $dateHeading = "> Journal Entry - $(Get-Date -Format 'yyyy-MM-dd')"
+    $title = "### **"
     Add-Content -Path $fullFilePath -Value $dateHeading
+    Add-Content -Path $fullFilePath -Value $title
 
     Write-Host "Journal created."
 

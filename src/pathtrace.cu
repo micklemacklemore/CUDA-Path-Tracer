@@ -156,6 +156,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
+        segment.isFinished = false; 
     }
 }
 
@@ -282,7 +283,56 @@ __global__ void shadeFakeMaterial(
     }
 }
 
+__device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
+  float x = xi.x;
+  float y = xi.y;
+  if (x == 0 && y == 0)
+    return glm::vec3(0, 0, 0);
 
+  float phi = 0.f;
+  float radius = 1.f;
+  float a = (2.f * x) - 1.f;
+  float b = (2.f * y) - 1.f;
+
+  // Uses squares instead of absolute values
+  if ((a * a) > (b * b)) {
+    // Top half
+    radius *= a;
+    phi = (PI / 4) * (b / a);
+  }
+  else {
+    // Bottom half
+    radius *= b;
+    phi = (PI / 2) - ((PI / 4) * (a / b));
+  }
+
+  // Map the distorted Polar coordinates (phi,radius)
+  // into the Cartesian (x,y) space
+  glm::vec3 disc(0.f, 0.f, 0.f);
+  disc.x = cos(phi) * radius;
+  disc.y = sin(phi) * radius;
+
+  // I think this ensures this is a hemisphere and not a sphere ? 
+  disc.z = glm::sqrt(1.f - (disc.x * disc.x) - (disc.y * disc.y));
+
+  return disc;
+}
+
+__device__ void localToWorld(const glm::vec3& normal, glm::vec3& vec) {
+  glm::vec3 tangent, bitangent;
+
+  // create coordinate system from normal 
+  if (glm::abs(normal.x) > glm::abs(normal.y))
+    tangent = glm::vec3(-normal.z, 0, normal.x) / glm::sqrt(normal.x * normal.x + normal.z * normal.z);
+  else
+    tangent = glm::vec3(0, normal.z, -normal.y) / glm::sqrt(normal.y * normal.y + normal.z * normal.z);
+  bitangent = cross(normal, tangent);
+
+  vec = glm::mat3(normal, tangent, bitangent) * vec; 
+}
+
+
+// TODO: if pathsegment has no more remaining bounces, do nothing
 __global__ void shadeMaterial(
   int iter,
   int num_paths,
@@ -291,32 +341,87 @@ __global__ void shadeMaterial(
   Material* materials)
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (idx < num_paths)
-  {
-    ShadeableIntersection intersection = shadeableIntersections[idx];
-    if (intersection.t > 0.0f) // if the intersection exists...
+
+  if (idx >= num_paths) {
+    return; 
+  }
+
+  PathSegment pathSegment = pathSegments[idx];
+
+  if (pathSegment.isFinished) {
+    return; 
+  }
+
+  ShadeableIntersection intersection = shadeableIntersections[idx];
+
+  if (intersection.t <= 0.0f) {
+    pathSegment.color = glm::vec3(0.0f);
+    pathSegment.isFinished = true; 
+  } 
+  else if (pathSegment.remainingBounces <= 0) {
+    pathSegment.color = glm::vec3(0.0f);
+    pathSegment.isFinished = true; 
+  }
+  else {
+    Material material = materials[intersection.materialId];
+    float pdf = 0.f;
+    glm::vec2 xi; 
+
+    // compute a random vec2
     {
-      Material material = materials[intersection.materialId];
-
-      if (material.emittance > 0.0f) {
-        // material is a light
-        pathSegments[idx].color = glm::vec3(0., 0., 1.);
-        return; 
-      }
-
-      if (material.hasReflective > 0.f) {
-        // material has specular
-        pathSegments[idx].color = glm::vec3(1., 0., 0.); 
-        return; 
-      }
-
-      // otherwise material is diffuse
-      pathSegments[idx].color = material.color;
+      thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
+      thrust::uniform_real_distribution<float> u01(0, 1);
+      xi.x = u01(rng); 
+      xi.y = u01(rng); 
     }
-    else {
-      pathSegments[idx].color = glm::vec3(0.0f);
+
+    if (material.emittance > 0.0f) {                      // LIGHT
+      // TODO: emmitance * current throughput (?)
+      pathSegment.color *= (material.color * material.emittance);
+      // pathSegment.color /= (float)iter; 
+      pathSegment.isFinished = true; 
+    }
+    else if (material.hasReflective > 0.f) {              // SPECULAR
+      // TODO: implement perfect specular
+      pathSegment.color = glm::vec3(0., 0., 0.);
+      pathSegment.remainingBounces = 0;
+    }
+    else {                                                // DIFFUSE
+      // generate random direction in hemisphere
+      glm::vec3 wi = squareToHemisphereCosine(xi);
+
+      // get the pdf (square to hemisphere cosine)
+      if (wi.z > 0.f) {
+        pdf = wi.z * INV_PI;
+      }
+
+      // ??
+      if (glm::isnan(pdf) || pdf < EPSILON) {
+        pathSegment.isFinished = true; 
+        pathSegment.color = glm::vec3(0.); 
+        pathSegments[idx] = pathSegment;
+        return; 
+      }
+
+      // convert vec3 into the world coordinate system (using surface normal)
+      localToWorld(intersection.surfaceNormal, wi);
+
+      // get the diffuse color (albedo * INV_PI)
+      glm::vec3 bsdfValue = material.color * INV_PI; 
+
+      // update throughput
+      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, pathSegment.ray.direction)) / pdf;
+
+      // new ray for the next bounce
+      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * glm::normalize(pathSegment.ray.direction)); 
+      pathSegment.ray.direction = glm::normalize(wi); 
+
+      --pathSegment.remainingBounces;
     }
   }
+
+  // read back into global memory
+  pathSegments[idx] = pathSegment;
 }
 
 
@@ -392,8 +497,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     // --- PathSegment Tracing Stage ---
     // Shoot ray into scene, bounce between objects, push shading chunks
 
-    bool iterationComplete = false;
-    while (!iterationComplete)
+    while (depth < traceDepth)
     {
         // clean shading chunks
         cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
@@ -428,7 +532,6 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_materials
         );
-        iterationComplete = true; // TODO: should be based off stream compaction results.
 
         if (guiData != NULL)
         {
