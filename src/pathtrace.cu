@@ -15,7 +15,7 @@
 #include "glm/gtx/norm.hpp"
 #include "utilities.h"
 #include "intersections.h"
-#include "interactions.h"
+#include "interactions.h" 
 
 #define ERRORCHECK 1
 
@@ -282,6 +282,44 @@ __global__ void shadeFakeMaterial(
     }
 }
 
+
+__global__ void shadeMaterial(
+  int iter,
+  int num_paths,
+  ShadeableIntersection* shadeableIntersections,
+  PathSegment* pathSegments,
+  Material* materials)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < num_paths)
+  {
+    ShadeableIntersection intersection = shadeableIntersections[idx];
+    if (intersection.t > 0.0f) // if the intersection exists...
+    {
+      Material material = materials[intersection.materialId];
+
+      if (material.emittance > 0.0f) {
+        // material is a light
+        pathSegments[idx].color = glm::vec3(0., 0., 1.);
+        return; 
+      }
+
+      if (material.hasReflective > 0.f) {
+        // material has specular
+        pathSegments[idx].color = glm::vec3(1., 0., 0.); 
+        return; 
+      }
+
+      // otherwise material is diffuse
+      pathSegments[idx].color = material.color;
+    }
+    else {
+      pathSegments[idx].color = glm::vec3(0.0f);
+    }
+  }
+}
+
+
 // Add the current iteration's output to the overall image
 __global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iterationPaths)
 {
@@ -383,7 +421,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // TODO: compare between directly shading the path segments and shading
         // path segments that have been reshuffled to be contiguous in memory.
 
-        shadeFakeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
+        shadeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
             iter,
             num_paths,
             dev_intersections,

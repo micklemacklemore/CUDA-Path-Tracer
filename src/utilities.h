@@ -17,8 +17,9 @@
 class GuiDataContainer
 {
 public:
-    GuiDataContainer() : TracedDepth(0) {}
+    GuiDataContainer() : TracedDepth(0), iterations(0) {}
     int TracedDepth;
+    int iterations; 
 };
 
 namespace utilityCore
