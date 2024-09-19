@@ -309,8 +309,8 @@ __device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
   // Map the distorted Polar coordinates (phi,radius)
   // into the Cartesian (x,y) space
   glm::vec3 disc(0.f, 0.f, 0.f);
-  disc.x = cos(phi) * radius;
-  disc.y = sin(phi) * radius;
+  disc.x = glm::cos(phi) * radius;
+  disc.y = glm::sin(phi) * radius;
 
   // I think this ensures this is a hemisphere and not a sphere ? 
   disc.z = glm::sqrt(1.f - (disc.x * disc.x) - (disc.y * disc.y));
@@ -322,13 +322,32 @@ __device__ void localToWorld(const glm::vec3& normal, glm::vec3& vec) {
   glm::vec3 tangent, bitangent;
 
   // create coordinate system from normal 
-  if (glm::abs(normal.x) > glm::abs(normal.y))
+  if (glm::abs(normal.x) > glm::abs(normal.y)) {
     tangent = glm::vec3(-normal.z, 0, normal.x) / glm::sqrt(normal.x * normal.x + normal.z * normal.z);
-  else
+  }
+  else {
     tangent = glm::vec3(0, normal.z, -normal.y) / glm::sqrt(normal.y * normal.y + normal.z * normal.z);
-  bitangent = cross(normal, tangent);
+  }
+    
+  bitangent = glm::cross(normal, tangent);
 
-  vec = glm::mat3(normal, tangent, bitangent) * vec; 
+  vec = glm::mat3(tangent, bitangent, normal) * vec; 
+}
+
+__device__ void worldToLocal(const glm::vec3& normal, glm::vec3& vec) {
+  glm::vec3 tangent, bitangent;
+
+  // create coordinate system from normal 
+  if (glm::abs(normal.x) > glm::abs(normal.y)) {
+    tangent = glm::vec3(-normal.z, 0, normal.x) / glm::sqrt(normal.x * normal.x + normal.z * normal.z);
+  }
+  else {
+    tangent = glm::vec3(0, normal.z, -normal.y) / glm::sqrt(normal.y * normal.y + normal.z * normal.z);
+  }
+
+  bitangent = glm::cross(normal, tangent);
+
+  vec = glm::transpose(glm::mat3(tangent, bitangent, normal)) * vec;
 }
 
 
@@ -381,42 +400,50 @@ __global__ void shadeMaterial(
       // pathSegment.color /= (float)iter; 
       pathSegment.isFinished = true; 
     }
+#if 0 
     else if (material.hasReflective > 0.f) {              // SPECULAR
       // TODO: implement perfect specular
       pathSegment.color = glm::vec3(0., 0., 0.);
       pathSegment.remainingBounces = 0;
     }
+#endif
     else {                                                // DIFFUSE
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
 
-      // get the pdf (square to hemisphere cosine)
-      if (wi.z > 0.f) {
-        pdf = wi.z * INV_PI;
-      }
+      glm::vec3 local_wo = -pathSegment.ray.direction; 
+      worldToLocal(intersection.surfaceNormal, -pathSegment.ray.direction); 
 
-      // ??
+      // From https://pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection, 
+      // to be honest I'm not sure what this does yet.
+      // I guess, if we're intersecting with a point that's 
+      // "upside down", we have to flip our generated iw too?
+      if (local_wo.z < 0) wi.z *= -1;
+
+      // get the pdf (square to hemisphere cosine)
+      pdf = glm::abs(wi.z) * INV_PI;
+
       if (glm::isnan(pdf) || pdf < EPSILON) {
-        pathSegment.isFinished = true; 
-        pathSegment.color = glm::vec3(0.); 
+        pathSegment.isFinished = true;
+        pathSegment.color = glm::vec3(0.);
         pathSegments[idx] = pathSegment;
-        return; 
+        return;
       }
 
       // convert vec3 into the world coordinate system (using surface normal)
       localToWorld(intersection.surfaceNormal, wi);
+      wi = glm::normalize(wi); 
 
       // get the diffuse color (albedo * INV_PI)
-      glm::vec3 bsdfValue = material.color * INV_PI; 
+      glm::vec3 bsdfValue = material.color * INV_PI;
 
       // update throughput
-      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, -pathSegment.ray.direction)) / pdf;
+      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, wi)) / pdf;
 
       // new ray for the next bounce
-      // slightly offset the ray origin in the direction of the ray direction
-      pathSegment.ray.origin += EPSILON * (glm::normalize(pathSegment.ray.direction)); 
-      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * glm::normalize(pathSegment.ray.direction)); 
-      pathSegment.ray.direction = glm::normalize(wi); 
+      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction); 
+      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
+      pathSegment.ray.direction = wi; 
 
       --pathSegment.remainingBounces;
     }
@@ -446,6 +473,7 @@ __global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iteration
 void pathtrace(uchar4* pbo, int frame, int iter)
 {
     const int traceDepth = hst_scene->state.traceDepth;
+    //const int traceDepth = 1; // DEBUG
     const Camera& cam = hst_scene->state.camera;
     const int pixelcount = cam.resolution.x * cam.resolution.y;
 
