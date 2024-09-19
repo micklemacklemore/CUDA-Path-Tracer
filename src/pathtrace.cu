@@ -369,7 +369,7 @@ __global__ void shadeMaterial(
 
     // compute a random vec2
     {
-      thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
+      thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pathSegment.remainingBounces);
       thrust::uniform_real_distribution<float> u01(0, 1);
       xi.x = u01(rng); 
       xi.y = u01(rng); 
@@ -410,9 +410,11 @@ __global__ void shadeMaterial(
       glm::vec3 bsdfValue = material.color * INV_PI; 
 
       // update throughput
-      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, pathSegment.ray.direction)) / pdf;
+      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, -pathSegment.ray.direction)) / pdf;
 
       // new ray for the next bounce
+      // slightly offset the ray origin in the direction of the ray direction
+      pathSegment.ray.origin += EPSILON * (glm::normalize(pathSegment.ray.direction)); 
       pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * glm::normalize(pathSegment.ray.direction)); 
       pathSegment.ray.direction = glm::normalize(wi); 
 
