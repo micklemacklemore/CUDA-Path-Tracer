@@ -399,10 +399,8 @@ __global__ void shadeMaterial(
     if (material.emittance > 0.0f) {                      // LIGHT
       // TODO: emmitance * current throughput (?)
       pathSegment.color *= (material.color * material.emittance);
-      // pathSegment.color /= (float)iter; 
       pathSegment.isFinished = true; 
     }
-#if 0
     else if (material.hasReflective > 0.f) {              // SPECULAR
       // TODO: implement perfect specular
       glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
@@ -417,17 +415,14 @@ __global__ void shadeMaterial(
 
       --pathSegment.remainingBounces; 
     }
-#endif
     else {                                                // DIFFUSE
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
-      glm::vec3 wo_world = -pathSegment.ray.direction; 
-      glm::vec3 wo = worldToLocal(intersection.surfaceNormal, wo_world);
+      //glm::vec3 wo_world = -pathSegment.ray.direction; 
+      //glm::vec3 wo = worldToLocal(intersection.surfaceNormal, wo_world);
 
       // get the pdf (square to hemisphere cosine)
-      // if (wo.z < 0.f) wi.z *= -1.f;
-      float pdf = glm::abs(wi.z) * INV_PI;
-      pdf = glm::max(pdf, 0.0001f);
+      pdf = glm::abs(wi.z) * INV_PI;
 
       glm::vec3 bsdfValue = material.color * INV_PI;
 
@@ -436,11 +431,10 @@ __global__ void shadeMaterial(
 
       // update throughput
       pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf;
-      pathSegment.color  = glm::clamp(pathSegment.color, glm::vec3(0.0f), glm::vec3(1.0f));
 
       // new ray for the next bounce
       pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction); 
-      pathSegment.ray.origin += EPSILON * intersection.surfaceNormal;   // slightly offset the ray origin in the direction of the ray direction
+      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
       pathSegment.ray.direction = wi; 
 
       --pathSegment.remainingBounces;
