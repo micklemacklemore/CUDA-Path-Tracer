@@ -73,6 +73,7 @@ struct PathSegment
     int pixelIndex;
     int remainingBounces;
     bool isFinished; 
+    bool isTerminated; 
 };
 
 // Use with a corresponding PathSegment to do:

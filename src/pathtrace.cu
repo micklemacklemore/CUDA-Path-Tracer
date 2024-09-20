@@ -6,6 +6,7 @@
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/remove.h>
+#include <thrust/device_ptr.h>
 
 #include <device_launch_parameters.h>
 
@@ -75,15 +76,15 @@ __global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution, int iter, glm
     }
 }
 
-static Scene* hst_scene = NULL;
-static GuiDataContainer* guiData = NULL;
-static glm::vec3* dev_image = NULL;
-static Geom* dev_geoms = NULL;
-static Material* dev_materials = NULL;
-static PathSegment* dev_paths = NULL;
-static ShadeableIntersection* dev_intersections = NULL;
-// TODO: static variables for device memory, any extra info you need, etc
-// ...
+static Scene* hst_scene = nullptr;
+static GuiDataContainer* guiData = nullptr;
+static glm::vec3* dev_image = nullptr;
+static Geom* dev_geoms = nullptr;
+static Material* dev_materials = nullptr;
+static PathSegment* dev_paths = nullptr;
+static ShadeableIntersection* dev_intersections = nullptr;
+
+static thrust::device_ptr<PathSegment> thrust_dev_paths = nullptr; 
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -111,7 +112,7 @@ void pathtraceInit(Scene* scene)
     cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
     cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
-    // TODO: initialize any extra device memeory you need
+    thrust_dev_paths = thrust::device_pointer_cast<PathSegment>(dev_paths); 
 
     checkCUDAError("pathtraceInit");
 }
@@ -157,6 +158,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
         segment.isFinished = false; 
+        segment.isTerminated = false; 
     }
 }
 
@@ -229,60 +231,6 @@ __global__ void computeIntersections(
     }
 }
 
-// LOOK: "fake" shader demonstrating what you might do with the info in
-// a ShadeableIntersection, as well as how to use thrust's random number
-// generator. Observe that since the thrust random number generator basically
-// adds "noise" to the iteration, the image should start off noisy and get
-// cleaner as more iterations are computed.
-//
-// Note that this shader does NOT do a BSDF evaluation!
-// Your shaders should handle that - this can allow techniques such as
-// bump mapping.
-__global__ void shadeFakeMaterial(
-    int iter,
-    int num_paths,
-    ShadeableIntersection* shadeableIntersections,
-    PathSegment* pathSegments,
-    Material* materials)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_paths)
-    {
-        ShadeableIntersection intersection = shadeableIntersections[idx];
-        if (intersection.t > 0.0f) // if the intersection exists...
-        {
-          // Set up the RNG
-          // LOOK: this is how you use thrust's RNG! Please look at
-          // makeSeededRandomEngine as well.
-            thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
-            thrust::uniform_real_distribution<float> u01(0, 1);
-
-            Material material = materials[intersection.materialId];
-            glm::vec3 materialColor = material.color;
-
-            // If the material indicates that the object was a light, "light" the ray
-            if (material.emittance > 0.0f) {
-                pathSegments[idx].color *= (materialColor * material.emittance);
-            }
-            // Otherwise, do some pseudo-lighting computation. This is actually more
-            // like what you would expect from shading in a rasterizer like OpenGL.
-            // TODO: replace this! you should be able to start with basically a one-liner
-            else {
-                float lightTerm = glm::dot(intersection.surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f));
-                pathSegments[idx].color *= (materialColor * lightTerm) * 0.3f + ((1.0f - intersection.t * 0.02f) * materialColor) * 0.7f;
-                pathSegments[idx].color *= u01(rng); // apply some noise because why not
-            }
-            // If there was no intersection, color the ray black.
-            // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
-            // used for opacity, in which case they can indicate "no opacity".
-            // This can be useful for post-processing and image compositing.
-        }
-        else {
-            pathSegments[idx].color = glm::vec3(0.0f);
-        }
-    }
-}
-
 __device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
   float x = xi.x;
   float y = xi.y;
@@ -350,11 +298,7 @@ __device__ glm::vec3 worldToLocal(const glm::vec3& normal, const glm::vec3& vec)
   return glm::transpose(glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal))) * vec;
 }
 
-__device__ bool sameHemisphere(glm::vec3 w, glm::vec3 wp) {
-  return w.z * wp.z > 0;
-}
 
-// TODO: if pathsegment has no more remaining bounces, do nothing
 __global__ void shadeMaterial(
   int iter,
   int num_paths,
@@ -378,11 +322,11 @@ __global__ void shadeMaterial(
 
   if (intersection.t <= 0.0f) {
     pathSegment.color = glm::vec3(0.0f);
-    pathSegment.isFinished = true; 
+    pathSegment.isTerminated = true; 
   } 
   else if (pathSegment.remainingBounces <= 0) {
     pathSegment.color = glm::vec3(0.0f);
-    pathSegment.isFinished = true; 
+    pathSegment.isTerminated = true; 
   }
   else {
     Material material = materials[intersection.materialId];
@@ -397,12 +341,10 @@ __global__ void shadeMaterial(
     
 
     if (material.emittance > 0.0f) {                      // LIGHT
-      // TODO: emmitance * current throughput (?)
       pathSegment.color *= (material.color * material.emittance);
       pathSegment.isFinished = true; 
     }
     else if (material.hasReflective > 0.f) {              // SPECULAR
-      // TODO: implement perfect specular
       glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
       glm::vec3 wi = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
 
@@ -418,8 +360,6 @@ __global__ void shadeMaterial(
     else {                                                // DIFFUSE
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
-      //glm::vec3 wo_world = -pathSegment.ray.direction; 
-      //glm::vec3 wo = worldToLocal(intersection.surfaceNormal, wo_world);
 
       // get the pdf (square to hemisphere cosine)
       pdf = glm::abs(wi.z) * INV_PI;
@@ -457,6 +397,15 @@ __global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iteration
         image[iterationPath.pixelIndex] += iterationPath.color;
     }
 }
+
+struct isTerminated
+{
+  __host__ __device__
+    bool operator()(const PathSegment& path) const
+  {
+    return path.isTerminated; 
+  }
+};
 
 /**
  * Wrapper for the __global__ call that sets up the kernel calls and does a ton
@@ -507,8 +456,6 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     // * Finally, add this iteration's results to the image. This has been done
     //   for you.
 
-    // TODO: perform one iteration of path tracing
-
     generateRayFromCamera<<<blocksPerGrid2d, blockSize2d>>>(cam, iter, traceDepth, dev_paths);
     checkCUDAError("generate camera ray");
 
@@ -546,6 +493,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // materials you have in the scenefile.
         // TODO: compare between directly shading the path segments and shading
         // path segments that have been reshuffled to be contiguous in memory.
+        
 
         shadeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
             iter,
@@ -554,6 +502,9 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_materials
         );
+
+        auto new_dev_path_end = thrust::remove_if(thrust_dev_paths, thrust_dev_paths + num_paths, isTerminated());
+        num_paths = new_dev_path_end - thrust_dev_paths; 
 
         if (guiData != NULL)
         {
