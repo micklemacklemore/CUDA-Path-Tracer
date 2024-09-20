@@ -7,6 +7,7 @@
 #include <thrust/random.h>
 #include <thrust/remove.h>
 #include <thrust/device_ptr.h>
+#include <thrust/sort.h>
 
 #include <device_launch_parameters.h>
 
@@ -19,6 +20,8 @@
 #include "interactions.h" 
 
 #define ERRORCHECK 1
+
+#define SORT_BY_MATERIAL 0
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -85,6 +88,7 @@ static PathSegment* dev_paths = nullptr;
 static ShadeableIntersection* dev_intersections = nullptr;
 
 static thrust::device_ptr<PathSegment> thrust_dev_paths = nullptr; 
+static thrust::device_ptr<ShadeableIntersection> thrust_dev_intersections = nullptr;
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -113,6 +117,7 @@ void pathtraceInit(Scene* scene)
     cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
     thrust_dev_paths = thrust::device_pointer_cast<PathSegment>(dev_paths); 
+    thrust_dev_intersections = thrust::device_pointer_cast<ShadeableIntersection>(dev_intersections); 
 
     checkCUDAError("pathtraceInit");
 }
@@ -149,10 +154,16 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         segment.ray.origin = cam.position;
         segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
 
+        thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
+        thrust::uniform_real_distribution<float> u01(0, 1);
+
         // TODO: implement antialiasing by jittering the ray
+        float jitterX = u01(rng) - 0.5f;  // Random offset in X ([-0.5, 0.5])
+        float jitterY = u01(rng) - 0.5f;  // Random offset in Y ([-0.5, 0.5])
+
         segment.ray.direction = glm::normalize(cam.view
-            - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f)
-            - cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f)
+            - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f + jitterX)
+            - cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f + jitterY)
         );
 
         segment.pixelIndex = index;
@@ -364,6 +375,12 @@ __global__ void shadeMaterial(
       // get the pdf (square to hemisphere cosine)
       pdf = glm::abs(wi.z) * INV_PI;
 
+      if (pdf < EPSILON || glm::isnan(pdf)) {
+        pathSegment.isTerminated = true; 
+        pathSegments[idx] = pathSegment;
+        return; 
+      }
+
       glm::vec3 bsdfValue = material.color * INV_PI;
 
       // convert vec3 into the world coordinate system (using surface normal)
@@ -371,6 +388,7 @@ __global__ void shadeMaterial(
 
       // update throughput
       pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf;
+      pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f); 
 
       // new ray for the next bounce
       pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction); 
@@ -483,8 +501,11 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         );
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();
-        depth++;
 
+        // sort paths / intersections by material 
+#if SORT_BY_MATERIAL
+        thrust::sort_by_key(thrust_dev_intersections, thrust_dev_intersections + num_paths, thrust_dev_paths);
+#endif
         // TODO:
         // --- Shading Stage ---
         // Shade path segments based on intersections and generate new rays by
@@ -493,7 +514,6 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // materials you have in the scenefile.
         // TODO: compare between directly shading the path segments and shading
         // path segments that have been reshuffled to be contiguous in memory.
-        
 
         shadeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
             iter,
@@ -506,9 +526,15 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         auto new_dev_path_end = thrust::remove_if(thrust_dev_paths, thrust_dev_paths + num_paths, isTerminated());
         num_paths = new_dev_path_end - thrust_dev_paths; 
 
+        depth++;
+
         if (guiData != NULL)
         {
             guiData->TracedDepth = depth;
+        }
+
+        if (num_paths == 0) {
+          break;
         }
     }
 
