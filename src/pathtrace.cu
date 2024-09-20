@@ -318,7 +318,7 @@ __device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
   return disc;
 }
 
-__device__ void localToWorld(const glm::vec3& normal, glm::vec3& vec) {
+__device__ glm::vec3 localToWorld(const glm::vec3& normal, const glm::vec3& vec) {
   glm::vec3 tangent, bitangent;
 
   // create coordinate system from normal 
@@ -331,10 +331,10 @@ __device__ void localToWorld(const glm::vec3& normal, glm::vec3& vec) {
     
   bitangent = glm::cross(normal, tangent);
 
-  vec = glm::mat3(tangent, bitangent, normal) * vec; 
+  return glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal)) * vec; 
 }
 
-__device__ void worldToLocal(const glm::vec3& normal, glm::vec3& vec) {
+__device__ glm::vec3 worldToLocal(const glm::vec3& normal, const glm::vec3& vec) {
   glm::vec3 tangent, bitangent;
 
   // create coordinate system from normal 
@@ -347,9 +347,12 @@ __device__ void worldToLocal(const glm::vec3& normal, glm::vec3& vec) {
 
   bitangent = glm::cross(normal, tangent);
 
-  vec = glm::transpose(glm::mat3(tangent, bitangent, normal)) * vec;
+  return glm::transpose(glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal))) * vec;
 }
 
+__device__ bool sameHemisphere(glm::vec3 w, glm::vec3 wp) {
+  return w.z * wp.z > 0;
+}
 
 // TODO: if pathsegment has no more remaining bounces, do nothing
 __global__ void shadeMaterial(
@@ -387,12 +390,11 @@ __global__ void shadeMaterial(
     glm::vec2 xi; 
 
     // compute a random vec2
-    {
-      thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pathSegment.remainingBounces);
-      thrust::uniform_real_distribution<float> u01(0, 1);
-      xi.x = u01(rng); 
-      xi.y = u01(rng); 
-    }
+    thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pathSegment.remainingBounces);
+    thrust::uniform_real_distribution<float> u01(0, 1);
+    xi.x = u01(rng); 
+    xi.y = u01(rng); 
+    
 
     if (material.emittance > 0.0f) {                      // LIGHT
       // TODO: emmitance * current throughput (?)
@@ -400,49 +402,45 @@ __global__ void shadeMaterial(
       // pathSegment.color /= (float)iter; 
       pathSegment.isFinished = true; 
     }
-#if 0 
+#if 0
     else if (material.hasReflective > 0.f) {              // SPECULAR
       // TODO: implement perfect specular
-      pathSegment.color = glm::vec3(0., 0., 0.);
-      pathSegment.remainingBounces = 0;
+      glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
+      glm::vec3 wi = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
+
+      pathSegment.color *= material.color; 
+
+      // new ray for the next bounce
+      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction);
+      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
+      pathSegment.ray.direction = wi;
+
+      --pathSegment.remainingBounces; 
     }
 #endif
     else {                                                // DIFFUSE
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
-
-      glm::vec3 local_wo = -pathSegment.ray.direction; 
-      worldToLocal(intersection.surfaceNormal, -pathSegment.ray.direction); 
-
-      // From https://pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection, 
-      // to be honest I'm not sure what this does yet.
-      // I guess, if we're intersecting with a point that's 
-      // "upside down", we have to flip our generated iw too?
-      if (local_wo.z < 0) wi.z *= -1;
+      glm::vec3 wo_world = -pathSegment.ray.direction; 
+      glm::vec3 wo = worldToLocal(intersection.surfaceNormal, wo_world);
 
       // get the pdf (square to hemisphere cosine)
-      pdf = glm::abs(wi.z) * INV_PI;
+      // if (wo.z < 0.f) wi.z *= -1.f;
+      float pdf = glm::abs(wi.z) * INV_PI;
+      pdf = glm::max(pdf, 0.0001f);
 
-      if (glm::isnan(pdf) || pdf < EPSILON) {
-        pathSegment.isFinished = true;
-        pathSegment.color = glm::vec3(0.);
-        pathSegments[idx] = pathSegment;
-        return;
-      }
-
-      // convert vec3 into the world coordinate system (using surface normal)
-      localToWorld(intersection.surfaceNormal, wi);
-      wi = glm::normalize(wi); 
-
-      // get the diffuse color (albedo * INV_PI)
       glm::vec3 bsdfValue = material.color * INV_PI;
 
+      // convert vec3 into the world coordinate system (using surface normal)
+      wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
+
       // update throughput
-      pathSegment.color *= bsdfValue * glm::abs(glm::dot(intersection.surfaceNormal, wi)) / pdf;
+      pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf;
+      pathSegment.color  = glm::clamp(pathSegment.color, glm::vec3(0.0f), glm::vec3(1.0f));
 
       // new ray for the next bounce
       pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction); 
-      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
+      pathSegment.ray.origin += EPSILON * intersection.surfaceNormal;   // slightly offset the ray origin in the direction of the ray direction
       pathSegment.ray.direction = wi; 
 
       --pathSegment.remainingBounces;
