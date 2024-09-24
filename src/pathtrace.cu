@@ -173,6 +173,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     }
 }
 
+//extern MeshAttributes testMesh; 
+
 // TODO:
 // computeIntersections handles generating ray intersections ONLY.
 // Generating new rays is handled in your shader(s).
@@ -375,7 +377,7 @@ __global__ void shadeMaterial(
       // get the pdf (square to hemisphere cosine)
       pdf = glm::abs(wi.z) * INV_PI;
 
-      if (pdf < EPSILON || glm::isnan(pdf)) {
+      if (pdf < EPSILON || isnan(pdf)) {
         pathSegment.isTerminated = true; 
         pathSegments[idx] = pathSegment;
         return; 
@@ -488,6 +490,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     {
         // clean shading chunks
         cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
+        checkCUDAError("cuda memset");
         // tracing
         dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
         computeIntersections<<<numblocksPathSegmentTracing, blockSize1d>>> (
