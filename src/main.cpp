@@ -15,6 +15,8 @@ static bool camchanged = true;
 static float dtheta = 0, dphi = 0;
 static glm::vec3 cammove;
 
+//extern MeshAttributes testMesh; 
+
 float zoom, theta, phi;
 glm::vec3 cameraPosition;
 glm::vec3 ogLookAt; // for recentering the camera

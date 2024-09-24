@@ -8,8 +8,9 @@
 #include <thrust/remove.h>
 #include <thrust/device_ptr.h>
 #include <thrust/sort.h>
-
 #include <device_launch_parameters.h>
+
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "sceneStructs.h"
 #include "scene.h"
@@ -18,10 +19,16 @@
 #include "utilities.h"
 #include "intersections.h"
 #include "interactions.h" 
+#include "meshio.h"
 
 #define ERRORCHECK 1
 
 #define SORT_BY_MATERIAL 0
+
+#define MESH_TEST 1
+
+#define DEBUG_SKY_LIGHT 1
+#define DEBUG_ONE_BOUNCE 1
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -107,8 +114,57 @@ void pathtraceInit(Scene* scene)
 
     cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
 
+#if MESH_TEST
+    MeshAttributes mesh; 
+    if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
+      std::cerr << "Failed to load test mesh" << std::endl; 
+      std::exit(-1); 
+    }
+
+    scene->geoms.clear(); 
+
+    Material test_mat{};
+
+    test_mat.color = glm::vec3(197, 227, 234);  // light blue
+    test_mat.color /= 255.f; 
+    test_mat.specular.color = glm::vec3(0.);
+    test_mat.specular.exponent = 0.; 
+
+    scene->materials.push_back(test_mat); 
+
+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    
+    for (size_t idx = 0; idx < mesh.indices.size(); idx += 3) {
+      Geom tri; 
+      tri.type = GeomType::TRIANGLE; 
+      tri.trianglePos[0] = mesh.positions[mesh.indices[idx + 0]];
+      tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
+      tri.trianglePos[2] = mesh.positions[mesh.indices[idx + 2]];
+
+      tri.trianglePos[0] *= 200.f;
+      tri.trianglePos[1] *= 200.f;
+      tri.trianglePos[2] *= 200.f;
+
+      tri.trianglePos[0].y -= 0.;
+      tri.trianglePos[1].y -= 0.;
+      tri.trianglePos[2].y -= 0.;
+
+      tri.trianglePos[0] = glm::vec3(model * glm::vec4(tri.trianglePos[0], 1.f));
+      tri.trianglePos[1] = glm::vec3(model * glm::vec4(tri.trianglePos[1], 1.f));
+      tri.trianglePos[2] = glm::vec3(model * glm::vec4(tri.trianglePos[2], 1.f));
+
+      tri.materialid = scene->materials.size() - 1;    // white diffuse
+
+      scene->geoms.push_back(tri); 
+      //break; 
+    }
+
     cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
     cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
+#else
+    cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
+    cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
+#endif
 
     cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
     cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
@@ -217,7 +273,27 @@ __global__ void computeIntersections(
             {
                 t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
             }
-            // TODO: add more intersection tests here... triangle? metaball? CSG?
+            else if (geom.type == TRIANGLE) {
+              glm::vec3 bary; 
+
+
+              if (glm::intersectRayTriangle(pathSegment.ray.origin, pathSegment.ray.direction, geom.trianglePos[0], geom.trianglePos[1], geom.trianglePos[2], bary)) {
+
+                // We don't use this but it works
+                // tmp_intersect = bary.x * geom.trianglePos[0] + bary.y * geom.trianglePos[1] + (1.0f - bary.x - bary.y) * geom.trianglePos[2];
+
+                t = bary.z;
+
+                // calculate tmp normal
+                tmp_normal = glm::normalize(glm::cross((geom.trianglePos[0] - geom.trianglePos[2]), (geom.trianglePos[1] - geom.trianglePos[2])));
+                if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
+                  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
+                }
+              }
+              else {
+                t = -1;
+              }
+            }
 
             // Compute the minimum t from the intersection tests to determine what
             // scene geometry object was hit first.
@@ -317,7 +393,8 @@ __global__ void shadeMaterial(
   int num_paths,
   ShadeableIntersection* shadeableIntersections,
   PathSegment* pathSegments,
-  Material* materials)
+  Material* materials,
+  int maxBounces)
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -334,8 +411,13 @@ __global__ void shadeMaterial(
   ShadeableIntersection intersection = shadeableIntersections[idx];
 
   if (intersection.t <= 0.0f) {
+#if DEBUG_SKY_LIGHT
+    pathSegment.color *= maxBounces == pathSegment.remainingBounces ? glm::vec3(0.) : glm::vec3(0.7); 
+    pathSegment.isFinished = true; 
+#else
     pathSegment.color = glm::vec3(0.0f);
     pathSegment.isTerminated = true; 
+#endif
   } 
   else if (pathSegment.remainingBounces <= 0) {
     pathSegment.color = glm::vec3(0.0f);
@@ -351,8 +433,6 @@ __global__ void shadeMaterial(
     thrust::uniform_real_distribution<float> u01(0, 1);
     xi.x = u01(rng); 
     xi.y = u01(rng); 
-    
-
     if (material.emittance > 0.0f) {                      // LIGHT
       pathSegment.color *= (material.color * material.emittance);
       pathSegment.isFinished = true; 
@@ -371,6 +451,7 @@ __global__ void shadeMaterial(
       --pathSegment.remainingBounces; 
     }
     else {                                                // DIFFUSE
+
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
 
@@ -383,7 +464,11 @@ __global__ void shadeMaterial(
         return; 
       }
 
+#if MESH_TEST
+      glm::vec3 bsdfValue = ((0.5f * intersection.surfaceNormal) + 1.f) * INV_PI;
+#else
       glm::vec3 bsdfValue = material.color * INV_PI;
+#endif
 
       // convert vec3 into the world coordinate system (using surface normal)
       wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
@@ -433,8 +518,11 @@ struct isTerminated
  */
 void pathtrace(uchar4* pbo, int frame, int iter)
 {
+#if DEBUG_ONE_BOUNCE
+    const int traceDepth = 1; // DEBUG
+#else
     const int traceDepth = hst_scene->state.traceDepth;
-    //const int traceDepth = 1; // DEBUG
+#endif
     const Camera& cam = hst_scene->state.camera;
     const int pixelcount = cam.resolution.x * cam.resolution.y;
 
@@ -522,7 +610,8 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             num_paths,
             dev_intersections,
             dev_paths,
-            dev_materials
+            dev_materials,
+            traceDepth
         );
 
         auto new_dev_path_end = thrust::remove_if(thrust_dev_paths, thrust_dev_paths + num_paths, isTerminated());
