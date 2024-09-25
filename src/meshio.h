@@ -7,7 +7,7 @@
 struct MeshAttributes {
   std::vector<glm::vec3> positions;
   std::vector<glm::vec3> normals;
-  std::vector<glm::uint16> indices;
+  std::vector<glm::uint32> indices;
 };
 
 

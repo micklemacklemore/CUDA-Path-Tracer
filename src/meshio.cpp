@@ -28,6 +28,18 @@ void printMatrix(const std::string& name, const std::vector<double>& m) {
   }
 }
 
+template <typename T>
+void castToVector(const std::vector<unsigned char>& buffer, size_t offset, size_t count, std::vector<glm::uint32>& result) {
+  result.clear();
+  result.reserve(count); 
+
+  for (size_t i = 0; i < count; ++i) {
+    T value; 
+    std::memcpy(&value, &buffer[offset + i], sizeof(T)); 
+    result.push_back(static_cast<glm::uint32>(value));
+  }
+}
+
 // assume glTF is 1 node, 1 mesh, 1 primitive... (TODO: make this a bit more robust)
 bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
 	tinygltf::Model model; 
@@ -136,8 +148,8 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     tinygltf::Accessor& accessor = model.accessors[prim.indices];
     tinygltf::BufferView& bufferview = model.bufferViews.at(accessor.bufferView);   // buffer views index is optional
 
-    // We must have vec3's of floats
-    if (accessor.type != TINYGLTF_TYPE_SCALAR || accessor.componentType != TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+    // indices must be scalar
+    if (accessor.type != TINYGLTF_TYPE_SCALAR) {
       return false;
     }
 
@@ -146,8 +158,20 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     size_t offset = bufferview.byteOffset + accessor.byteOffset;
     size_t count = accessor.count;
 
-    out_attr.indices.resize(count); 
-    std::memcpy(out_attr.indices.data(), &buffer.data[offset], count * sizeof(glm::uint16));
+    switch (accessor.componentType) {
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+      castToVector<glm::uint8>(buffer.data, offset, count, out_attr.indices);
+      break; 
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+      castToVector<glm::uint16>(buffer.data, offset, count, out_attr.indices);
+      break;
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+      castToVector<glm::uint32>(buffer.data, offset, count, out_attr.indices);
+      break; 
+    default:
+      return false; 
+    }
+
   }
 
   return true; 
