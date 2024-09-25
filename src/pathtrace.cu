@@ -28,7 +28,11 @@
 #define MESH_TEST 1
 
 #define DEBUG_SKY_LIGHT 1
-#define DEBUG_ONE_BOUNCE 1
+#define DEBUG_SKY_LIGHT_BLACK_BG 1
+
+#define DEBUG_ONE_BOUNCE 0
+#define DEBUG_NORMALS 1
+
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -116,6 +120,7 @@ void pathtraceInit(Scene* scene)
 
 #if MESH_TEST
     MeshAttributes mesh; 
+    // if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
     if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
       std::cerr << "Failed to load test mesh" << std::endl; 
       std::exit(-1); 
@@ -141,6 +146,10 @@ void pathtraceInit(Scene* scene)
       tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
       tri.trianglePos[2] = mesh.positions[mesh.indices[idx + 2]];
 
+      tri.triangleNor[0] = mesh.normals[mesh.indices[idx + 0]];
+      tri.triangleNor[1] = mesh.normals[mesh.indices[idx + 1]];
+      tri.triangleNor[2] = mesh.normals[mesh.indices[idx + 2]];
+
       tri.trianglePos[0] *= 200.f;
       tri.trianglePos[1] *= 200.f;
       tri.trianglePos[2] *= 200.f;
@@ -156,7 +165,6 @@ void pathtraceInit(Scene* scene)
       tri.materialid = scene->materials.size() - 1;    // white diffuse
 
       scene->geoms.push_back(tri); 
-      //break; 
     }
 
     cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
@@ -280,15 +288,18 @@ __global__ void computeIntersections(
               if (glm::intersectRayTriangle(pathSegment.ray.origin, pathSegment.ray.direction, geom.trianglePos[0], geom.trianglePos[1], geom.trianglePos[2], bary)) {
 
                 // We don't use this but it works
-                // tmp_intersect = bary.x * geom.trianglePos[0] + bary.y * geom.trianglePos[1] + (1.0f - bary.x - bary.y) * geom.trianglePos[2];
+                //tmp_intersect = bary.x * geom.trianglePos[0] + bary.y * geom.trianglePos[1] + (1.0f - bary.x - bary.y) * geom.trianglePos[2];
 
                 t = bary.z;
 
                 // calculate tmp normal
-                tmp_normal = glm::normalize(glm::cross((geom.trianglePos[0] - geom.trianglePos[2]), (geom.trianglePos[1] - geom.trianglePos[2])));
-                if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
-                  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
-                }
+                tmp_normal = bary.x * geom.triangleNor[1] + bary.y * geom.triangleNor[2] + (1.0f - bary.x - bary.y) * geom.triangleNor[0];
+                tmp_normal = glm::normalize(tmp_normal); 
+
+                // This produces weird results, i'm not sure why
+                //if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
+                //  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
+                //}
               }
               else {
                 t = -1;
@@ -411,8 +422,11 @@ __global__ void shadeMaterial(
   ShadeableIntersection intersection = shadeableIntersections[idx];
 
   if (intersection.t <= 0.0f) {
-#if DEBUG_SKY_LIGHT
-    pathSegment.color *= maxBounces == pathSegment.remainingBounces ? glm::vec3(0.) : glm::vec3(0.7); 
+#if DEBUG_SKY_LIGHT && DEBUG_SKY_LIGHT_BLACK_BG
+    pathSegment.color *= pathSegment.remainingBounces == maxBounces ? glm::vec3(0.) : glm::vec3(1.);
+    pathSegment.isFinished = true;
+#elif DEBUG_SKY_LIGHT
+    pathSegment.color *= glm::vec3(1.); 
     pathSegment.isFinished = true; 
 #else
     pathSegment.color = glm::vec3(0.0f);
@@ -451,7 +465,6 @@ __global__ void shadeMaterial(
       --pathSegment.remainingBounces; 
     }
     else {                                                // DIFFUSE
-
       // generate random direction in hemisphere
       glm::vec3 wi = squareToHemisphereCosine(xi);
 
@@ -464,8 +477,9 @@ __global__ void shadeMaterial(
         return; 
       }
 
-#if MESH_TEST
-      glm::vec3 bsdfValue = ((0.5f * intersection.surfaceNormal) + 1.f) * INV_PI;
+#if DEBUG_NORMALS
+      glm::vec3 bsdfValue = glm::clamp(((0.5f * intersection.surfaceNormal) + 1.f), 0.f, .9f) * INV_PI;
+      //glm::vec3 bsdfValue = intersection.surfaceNormal * INV_PI; 
 #else
       glm::vec3 bsdfValue = material.color * INV_PI;
 #endif

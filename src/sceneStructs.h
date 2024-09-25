@@ -31,6 +31,7 @@ struct Geom
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
     glm::vec3 trianglePos[3];  
+    glm::vec3 triangleNor[3]; 
 };
 
 struct Material

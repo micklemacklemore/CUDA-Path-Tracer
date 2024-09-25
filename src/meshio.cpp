@@ -35,7 +35,7 @@ void castToVector(const std::vector<unsigned char>& buffer, size_t offset, size_
 
   for (size_t i = 0; i < count; ++i) {
     T value; 
-    std::memcpy(&value, &buffer[offset + i], sizeof(T)); 
+    std::memcpy(&value, &buffer[offset + i * sizeof(T)], sizeof(T));
     result.push_back(static_cast<glm::uint32>(value));
   }
 }
