@@ -24,6 +24,7 @@ Scene::Scene(string filename)
     }
 }
 
+// TODO: incorporate glTF loading as part of the JSON
 void Scene::loadFromJSON(const std::string& jsonName)
 {
     std::ifstream f(jsonName);
@@ -53,6 +54,11 @@ void Scene::loadFromJSON(const std::string& jsonName)
             newMaterial.hasReflective = 1.f; // right now this is either 0 or 1
         }
         MatNameToID[name] = materials.size();
+
+        // TODO: We'd need to design a way to incorporate textures in the json
+        newMaterial.textureIdx.albedo = -1; 
+        newMaterial.textureIdx.normal = -1; 
+
         materials.emplace_back(newMaterial);
     }
     const auto& objectsData = data["Objects"];

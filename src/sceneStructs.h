@@ -39,12 +39,18 @@ struct Geom
 
 struct Material
 {
-    glm::vec3 color;
     struct
     {
         float exponent;
         glm::vec3 color;
     } specular;
+    struct
+    {
+      int albedo; 
+      int normal; 
+    } textureIdx;
+
+    glm::vec3 color;
     float hasReflective;
     float hasRefractive;
     float indexOfRefraction;
@@ -89,11 +95,8 @@ struct ShadeableIntersection
 {
   float t;
   glm::vec3 surfaceNormal;
-  glm::vec4 textureColor; 
+  glm::vec2 texSample; 
   int materialId;
-
-  // TODO: this is dumb
-  bool isTextured = false; 
 
   __host__ __device__ bool operator<(const ShadeableIntersection& other) const
   {
