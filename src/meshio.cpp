@@ -6,30 +6,10 @@
 
 #include <cstdio>
 
-// TODO could use things like GetComponentSizeInBytes to double check raw array
-
-void printVector(const std::string& name, const std::vector<double>& v) {
-  if (!v.empty()) {
-    std::printf("%s: %f %f %f\n", name.c_str(), v[0], v[1], v[2]);
-  }
-  else {
-    std::printf("%s: empty\n", name.c_str()); 
-  }
-}
-
-void printMatrix(const std::string& name, const std::vector<double>& m) {
-  std::printf("%s: \n", name.c_str());
-  if (!m.empty()) {
-    // column matrix
-    std::printf("%f %f %f %f\n", m[4 * 0], m[4 * 1], m[4 * 2], m[4 * 3]);
-    std::printf("%f %f %f %f\n", m[4 * 0 + 1], m[4 * 1 + 1], m[4 * 2 + 1], m[4 * 3 + 1]);
-    std::printf("%f %f %f %f\n", m[4 * 0 + 2], m[4 * 1 + 2], m[4 * 2 + 2], m[4 * 3 + 2]);
-    std::printf("%f %f %f %f\n", m[4 * 0 + 3], m[4 * 1 + 3], m[4 * 2 + 3], m[4 * 3 + 3]);
-  }
-}
+#define COLOR_DEBUG 0
 
 template <typename T>
-void castToVector(const std::vector<unsigned char>& buffer, size_t offset, size_t count, std::vector<glm::uint32>& result) {
+void castToIntArray(const std::vector<unsigned char>& buffer, size_t offset, size_t count, std::vector<glm::uint32>& result) {
   result.clear();
   result.reserve(count); 
 
@@ -67,6 +47,8 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     return false; 
   }
 
+  // TODO: node may have transforms, we should factor that in
+
   // primitives contain index for attribute buffers, materials, draw mode
   tinygltf::Primitive& prim = model.meshes[0].primitives[0];
 
@@ -75,13 +57,16 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     return false; 
   }
 
-  int posIdx, norIdx; 
+  int posIdx, norIdx, texIdx; 
   {
     auto it = prim.attributes.find("POSITION");
     posIdx = it == prim.attributes.end() ? -1 : it->second;
 
     it = prim.attributes.find("NORMAL");
     norIdx = it == prim.attributes.end() ? -1 : it->second;
+
+    it = prim.attributes.find("TEXCOORD_0"); 
+    texIdx = it == prim.attributes.end() ? -1 : it->second; 
   }
 
   // must at least have positions array!
@@ -96,6 +81,7 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     
     // We must have vec3's of floats
     if (accessor.type != TINYGLTF_TYPE_VEC3 || accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT) {
+      std::fprintf(stderr, "Position data in unsupported format.\n");
       return false; 
     }
 
@@ -124,6 +110,7 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
 
     // We must have vec3's of floats
     if (accessor.type != TINYGLTF_TYPE_VEC3 || accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT) {
+      std::fprintf(stderr, "Normal data in unsupported format.\n");
       return false;
     }
 
@@ -139,6 +126,31 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
 
     for (size_t i = 0; i < count; ++i) {
       out_attr.normals.emplace_back(glm::make_vec3(&nor[i * 3]));
+    }
+  }
+
+  // fill tex coords array
+  if (texIdx != -1) {
+    tinygltf::Accessor& accessor = model.accessors[texIdx];
+    tinygltf::BufferView& bufferview = model.bufferViews.at(accessor.bufferView);   // buffer views index is optional
+
+    if (accessor.type != TINYGLTF_TYPE_VEC2 || accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT) {
+      std::fprintf(stderr, "Texture coordinate data in unsupported format.\n");
+      return false; 
+    }
+
+    tinygltf::Buffer& buffer = model.buffers[bufferview.buffer];
+
+    size_t offset = bufferview.byteOffset + accessor.byteOffset;
+    size_t count = accessor.count;
+
+    std::vector<glm::float32> tex; 
+    tex.resize(count * 2);    // vec2
+
+    std::memcpy(tex.data(), &buffer.data[offset], count * sizeof(glm::float32) * 2); 
+
+    for (size_t i = 0; i < count; ++i) {
+      out_attr.texcoords.emplace_back(glm::make_vec2(&tex[i * 2]));
     }
   }
 
@@ -160,18 +172,65 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
 
     switch (accessor.componentType) {
     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-      castToVector<glm::uint8>(buffer.data, offset, count, out_attr.indices);
+      castToIntArray<glm::uint8>(buffer.data, offset, count, out_attr.indices);
       break; 
     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-      castToVector<glm::uint16>(buffer.data, offset, count, out_attr.indices);
+      castToIntArray<glm::uint16>(buffer.data, offset, count, out_attr.indices);
       break;
     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-      castToVector<glm::uint32>(buffer.data, offset, count, out_attr.indices);
+      castToIntArray<glm::uint32>(buffer.data, offset, count, out_attr.indices);
       break; 
     default:
       return false; 
     }
+  }
 
+  // read first texture
+  // Texture& texture = model.textures[0]; 
+  if (!model.images.empty()) {
+    tinygltf::Image& image = model.images[0];
+
+    // right now, lets assume RGBA (4-channel) color, 8-bit depth.
+    // If something else comes along we'll deal with it. 
+    if (image.component != 4 || 
+      image.bits != 8 || 
+      image.pixel_type != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+      std::fprintf(stderr, "Texture could not be loaded: Unsupported image format.\n"); 
+      return false; 
+    }
+
+    // also image could be in buffer view, I'm not sure how 
+    // tinygltf handles this, so yell at me so I can investigate. 
+    if (image.bufferView != -1) {
+      std::fprintf(stderr, "Texture in bin data, not supported?\n"); 
+      return false; 
+    }
+
+    out_attr.image.width = image.width; 
+    out_attr.image.height = image.height; 
+
+    size_t numPixels = static_cast<size_t>(image.width) * image.height; 
+    std::vector<glm::uint8> imageBuffer; 
+    imageBuffer.resize(numPixels * 4); 
+
+    std::memcpy(imageBuffer.data(), image.image.data(), numPixels * 4 * sizeof(glm::uint8)); 
+
+    for (size_t i = 0; i < numPixels; ++i) {
+      size_t idx = i * 4; 
+      glm::vec4 color; 
+#if COLOR_DEBUG
+      color.r = imageBuffer[idx];
+      color.g = imageBuffer[idx + 1];
+      color.b = imageBuffer[idx + 2];
+      color.a = imageBuffer[idx + 3];
+#else
+      color.r = imageBuffer[idx] / 255.f; 
+      color.g = imageBuffer[idx + 1] / 255.f; 
+      color.b = imageBuffer[idx + 2] / 255.f;
+      color.a = imageBuffer[idx + 3] / 255.f;
+#endif
+      out_attr.image.buffer.push_back(color); 
+    }
   }
 
   return true; 

@@ -27,11 +27,11 @@
 
 #define MESH_TEST 1
 
-#define DEBUG_SKY_LIGHT 1
-#define DEBUG_SKY_LIGHT_BLACK_BG 1
+#define DEBUG_SKY_LIGHT 0
+#define DEBUG_SKY_LIGHT_BLACK_BG 0
 
 #define DEBUG_ONE_BOUNCE 0
-#define DEBUG_NORMALS 1
+#define DEBUG_NORMALS 0
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -45,7 +45,6 @@ void checkCUDAErrorFn(const char* msg, const char* file, int line)
     {
         return;
     }
-
     fprintf(stderr, "CUDA error");
     if (file)
     {
@@ -97,6 +96,7 @@ static Geom* dev_geoms = nullptr;
 static Material* dev_materials = nullptr;
 static PathSegment* dev_paths = nullptr;
 static ShadeableIntersection* dev_intersections = nullptr;
+static std::vector<cudaTextureObject_t> dev_textures;
 
 static thrust::device_ptr<PathSegment> thrust_dev_paths = nullptr; 
 static thrust::device_ptr<ShadeableIntersection> thrust_dev_intersections = nullptr;
@@ -126,7 +126,7 @@ void pathtraceInit(Scene* scene)
       std::exit(-1); 
     }
 
-    scene->geoms.clear(); 
+    //scene->geoms.clear(); 
 
     Material test_mat{};
 
@@ -142,21 +142,29 @@ void pathtraceInit(Scene* scene)
     for (size_t idx = 0; idx < mesh.indices.size(); idx += 3) {
       Geom tri; 
       tri.type = GeomType::TRIANGLE; 
-      tri.trianglePos[0] = mesh.positions[mesh.indices[idx + 0]];
+      tri.trianglePos[0] = mesh.positions[mesh.indices[idx]];
       tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
       tri.trianglePos[2] = mesh.positions[mesh.indices[idx + 2]];
 
-      tri.triangleNor[0] = mesh.normals[mesh.indices[idx + 0]];
+      tri.triangleNor[0] = mesh.normals[mesh.indices[idx]];
       tri.triangleNor[1] = mesh.normals[mesh.indices[idx + 1]];
       tri.triangleNor[2] = mesh.normals[mesh.indices[idx + 2]];
 
-      tri.trianglePos[0] *= 200.f;
-      tri.trianglePos[1] *= 200.f;
-      tri.trianglePos[2] *= 200.f;
+      tri.triangleTex[0] = mesh.texcoords[mesh.indices[idx]];
+      tri.triangleTex[1] = mesh.texcoords[mesh.indices[idx + 1]];
+      tri.triangleTex[2] = mesh.texcoords[mesh.indices[idx + 2]];
 
-      tri.trianglePos[0].y -= 0.;
-      tri.trianglePos[1].y -= 0.;
-      tri.trianglePos[2].y -= 0.;
+      // for material.gltf
+
+      /*tri.trianglePos[0].y += 5.; 
+      tri.trianglePos[1].y += 5.;
+      tri.trianglePos[2].y += 5.;*/
+
+      // for the avocado
+
+      tri.trianglePos[0] *= 100.f;
+      tri.trianglePos[1] *= 100.f;
+      tri.trianglePos[2] *= 100.f;
 
       tri.trianglePos[0] = glm::vec3(model * glm::vec4(tri.trianglePos[0], 1.f));
       tri.trianglePos[1] = glm::vec3(model * glm::vec4(tri.trianglePos[1], 1.f));
@@ -165,6 +173,48 @@ void pathtraceInit(Scene* scene)
       tri.materialid = scene->materials.size() - 1;    // white diffuse
 
       scene->geoms.push_back(tri); 
+    }
+
+    if (!mesh.image.buffer.empty()) {
+      // Allocate CUDA array in device memory
+      
+      // channel format desc specifies the number of bits 
+      // in each texture channel (rgba) and the component
+      // format (in this case floats)
+      cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
+
+      // similar to `cudaMalloc` but for 2D/3D arrays afaik
+      cudaArray_t cuArray;
+      cudaMallocArray(&cuArray, &channelDesc, mesh.image.width, mesh.image.height);
+      checkCUDAError("cudaMallocArray");
+
+      // Set pitch of the source (the width in memory in bytes of the 2D array pointed
+      // to by src, including padding), we dont have any padding
+      const size_t spitch = mesh.image.width * 4 * sizeof(float);
+      cudaMemcpy2DToArray(cuArray, 0, 0, mesh.image.buffer.data(), 
+        spitch, mesh.image.width * 4 * sizeof(float),
+        mesh.image.height, cudaMemcpyHostToDevice);
+      checkCUDAError("cudaMemcpy2DToArray"); 
+
+      // Specify texture
+      struct cudaResourceDesc resDesc;
+      memset(&resDesc, 0, sizeof(resDesc));
+      resDesc.resType = cudaResourceTypeArray;
+      resDesc.res.array.array = cuArray;
+
+      // Specify texture object parameters
+      struct cudaTextureDesc texDesc;
+      memset(&texDesc, 0, sizeof(texDesc));
+      texDesc.addressMode[0] = cudaAddressModeClamp;
+      texDesc.addressMode[1] = cudaAddressModeClamp;
+      texDesc.filterMode = cudaFilterModeLinear;
+      texDesc.readMode = cudaReadModeElementType;
+      texDesc.normalizedCoords = 1;
+
+      cudaTextureObject_t texObj = 0; 
+      cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr);
+
+      dev_textures.push_back(texObj); 
     }
 
     cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
@@ -244,12 +294,15 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 // Generating new rays is handled in your shader(s).
 // Feel free to modify the code below.
 __global__ void computeIntersections(
-    int depth,
-    int num_paths,
-    PathSegment* pathSegments,
-    Geom* geoms,
-    int geoms_size,
-    ShadeableIntersection* intersections)
+  int depth,
+  int num_paths,
+  PathSegment* pathSegments,
+  Geom* geoms,
+  int geoms_size,
+  ShadeableIntersection* intersections,
+  cudaTextureObject_t texObj,
+  int textures_size
+)
 {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -260,12 +313,17 @@ __global__ void computeIntersections(
         float t;
         glm::vec3 intersect_point;
         glm::vec3 normal;
+        glm::vec4 texcolor; 
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
         bool outside = true;
 
+        bool tmp_isTextured = false; 
+        bool textured = false; 
+
         glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
+        glm::vec4 tmp_texcolor; 
 
         // naive parse through global geoms
 
@@ -276,10 +334,12 @@ __global__ void computeIntersections(
             if (geom.type == CUBE)
             {
                 t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                tmp_isTextured = false; 
             }
             else if (geom.type == SPHERE)
             {
                 t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                tmp_isTextured = false;
             }
             else if (geom.type == TRIANGLE) {
               glm::vec3 bary; 
@@ -295,6 +355,13 @@ __global__ void computeIntersections(
                 // calculate tmp normal
                 tmp_normal = bary.x * geom.triangleNor[1] + bary.y * geom.triangleNor[2] + (1.0f - bary.x - bary.y) * geom.triangleNor[0];
                 tmp_normal = glm::normalize(tmp_normal); 
+
+                if (textures_size) {
+                  glm::vec2 stcoords = bary.x * geom.triangleTex[1] + bary.y * geom.triangleTex[2] + (1.0f - bary.x - bary.y) * geom.triangleTex[0];
+                  float4 color = tex2D<float4>(texObj, stcoords.s, stcoords.t); 
+                  tmp_texcolor = glm::vec4(color.x, color.y, color.z, color.w); 
+                  tmp_isTextured = true;
+                }
 
                 // This produces weird results, i'm not sure why
                 //if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
@@ -314,6 +381,8 @@ __global__ void computeIntersections(
                 hit_geom_index = i;
                 intersect_point = tmp_intersect;
                 normal = tmp_normal;
+                texcolor = tmp_texcolor; 
+                textured = tmp_isTextured; 
             }
         }
 
@@ -327,6 +396,8 @@ __global__ void computeIntersections(
             intersections[path_index].t = t_min;
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
             intersections[path_index].surfaceNormal = normal;
+            intersections[path_index].textureColor = texcolor; 
+            intersections[path_index].isTextured = textured; 
         }
     }
 }
@@ -478,10 +549,13 @@ __global__ void shadeMaterial(
       }
 
 #if DEBUG_NORMALS
-      glm::vec3 bsdfValue = glm::clamp(((0.5f * intersection.surfaceNormal) + 1.f), 0.f, .9f) * INV_PI;
-      //glm::vec3 bsdfValue = intersection.surfaceNormal * INV_PI; 
+      //glm::vec3 bsdfValue = glm::clamp(((0.5f * intersection.surfaceNormal) + 1.f), 0.f, .9f) * INV_PI;
+      glm::vec3 bsdfValue = intersection.surfaceNormal * INV_PI; 
 #else
       glm::vec3 bsdfValue = material.color * INV_PI;
+      if (intersection.isTextured) {
+        bsdfValue = glm::vec3(intersection.textureColor) * material.color * INV_PI;
+      }
 #endif
 
       // convert vec3 into the world coordinate system (using surface normal)
@@ -601,7 +675,9 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_geoms,
             hst_scene->geoms.size(),
-            dev_intersections
+            dev_intersections,
+            dev_textures[0],  // TODO: should probably be some sort of dev array of tex object pointers
+            dev_textures.size()
         );
         checkCUDAError("trace one bounce");
         cudaDeviceSynchronize();

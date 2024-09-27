@@ -30,8 +30,11 @@ struct Geom
     glm::mat4 transform;
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
+
+    // triangle attributes
     glm::vec3 trianglePos[3];  
     glm::vec3 triangleNor[3]; 
+    glm::vec2 triangleTex[3]; 
 };
 
 struct Material
@@ -86,7 +89,11 @@ struct ShadeableIntersection
 {
   float t;
   glm::vec3 surfaceNormal;
+  glm::vec4 textureColor; 
   int materialId;
+
+  // TODO: this is dumb
+  bool isTextured = false; 
 
   __host__ __device__ bool operator<(const ShadeableIntersection& other) const
   {
