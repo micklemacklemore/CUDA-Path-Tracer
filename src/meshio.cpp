@@ -6,8 +6,6 @@
 
 #include <cstdio>
 
-#define COLOR_DEBUG 0
-
 template <typename T>
 void castToIntArray(const std::vector<unsigned char>& buffer, size_t offset, size_t count, std::vector<glm::uint32>& result) {
   result.clear();
@@ -18,6 +16,45 @@ void castToIntArray(const std::vector<unsigned char>& buffer, size_t offset, siz
     std::memcpy(&value, &buffer[offset + i * sizeof(T)], sizeof(T));
     result.push_back(static_cast<glm::uint32>(value));
   }
+}
+
+bool loadGLTFImageBuffer(meshio::ImageData& outImageData, const tinygltf::Image& image) {
+  // right now, lets assume RGBA (4-channel) color, 8-bit depth.
+  // If something else comes along we'll deal with it. 
+  if (image.component != 4 ||
+    image.bits != 8 ||
+    image.pixel_type != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+    std::fprintf(stderr, "Texture could not be loaded: Unsupported image format.\n");
+    return false;
+  }
+
+  // also image could be in buffer view, I'm not sure how 
+  // tinygltf handles this, so yell at me so I can investigate. 
+  if (image.bufferView != -1) {
+    std::fprintf(stderr, "Texture in bin data, not supported?\n");
+    return false;
+  }
+
+  outImageData.width = image.width;
+  outImageData.height = image.height;
+
+  size_t numPixels = static_cast<size_t>(image.width) * image.height;
+  std::vector<glm::uint8> imageBuffer;
+  imageBuffer.resize(numPixels * 4);
+
+  std::memcpy(imageBuffer.data(), image.image.data(), numPixels * 4 * sizeof(glm::uint8));
+
+  for (size_t i = 0; i < numPixels; ++i) {
+    size_t idx = i * 4;
+    glm::vec4 color;
+    color.r = imageBuffer[idx] / 255.f;
+    color.g = imageBuffer[idx + 1] / 255.f;
+    color.b = imageBuffer[idx + 2] / 255.f;
+    color.a = imageBuffer[idx + 3] / 255.f;
+    outImageData.buffer.push_back(color);
+  }
+
+  return true; 
 }
 
 // assume glTF is 1 node, 1 mesh, 1 primitive... (TODO: make this a bit more robust)
@@ -47,7 +84,7 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     return false; 
   }
 
-  // TODO: node may have transforms, we should factor that in
+  // TODO: node may have transforms, we should factor that in?
 
   // primitives contain index for attribute buffers, materials, draw mode
   tinygltf::Primitive& prim = model.meshes[0].primitives[0];
@@ -65,6 +102,7 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     it = prim.attributes.find("NORMAL");
     norIdx = it == prim.attributes.end() ? -1 : it->second;
 
+    // assumes only one set of texture coordinates
     it = prim.attributes.find("TEXCOORD_0"); 
     texIdx = it == prim.attributes.end() ? -1 : it->second; 
   }
@@ -185,51 +223,23 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     }
   }
 
-  // read first texture
-  // Texture& texture = model.textures[0]; 
-  if (!model.images.empty()) {
-    tinygltf::Image& image = model.images[0];
+  // we look for textures through the model's material
+  if (prim.material != -1 && !model.images.empty()) {
+    tinygltf::Material material = model.materials[prim.material]; 
 
-    // right now, lets assume RGBA (4-channel) color, 8-bit depth.
-    // If something else comes along we'll deal with it. 
-    if (image.component != 4 || 
-      image.bits != 8 || 
-      image.pixel_type != TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-      std::fprintf(stderr, "Texture could not be loaded: Unsupported image format.\n"); 
-      return false; 
+    int baseColorIdx = material.pbrMetallicRoughness.baseColorTexture.index; 
+    int normalIdx = material.normalTexture.index; 
+
+    if (baseColorIdx != -1) {
+      if (!loadGLTFImageBuffer(out_attr.textureAlbedo, model.images[baseColorIdx])) {
+        return false; 
+      }
     }
 
-    // also image could be in buffer view, I'm not sure how 
-    // tinygltf handles this, so yell at me so I can investigate. 
-    if (image.bufferView != -1) {
-      std::fprintf(stderr, "Texture in bin data, not supported?\n"); 
-      return false; 
-    }
-
-    out_attr.image.width = image.width; 
-    out_attr.image.height = image.height; 
-
-    size_t numPixels = static_cast<size_t>(image.width) * image.height; 
-    std::vector<glm::uint8> imageBuffer; 
-    imageBuffer.resize(numPixels * 4); 
-
-    std::memcpy(imageBuffer.data(), image.image.data(), numPixels * 4 * sizeof(glm::uint8)); 
-
-    for (size_t i = 0; i < numPixels; ++i) {
-      size_t idx = i * 4; 
-      glm::vec4 color; 
-#if COLOR_DEBUG
-      color.r = imageBuffer[idx];
-      color.g = imageBuffer[idx + 1];
-      color.b = imageBuffer[idx + 2];
-      color.a = imageBuffer[idx + 3];
-#else
-      color.r = imageBuffer[idx] / 255.f; 
-      color.g = imageBuffer[idx + 1] / 255.f; 
-      color.b = imageBuffer[idx + 2] / 255.f;
-      color.a = imageBuffer[idx + 3] / 255.f;
-#endif
-      out_attr.image.buffer.push_back(color); 
+    if (normalIdx != -1) {
+      if (!loadGLTFImageBuffer(out_attr.textureNormal, model.images[normalIdx])) {
+        return false; 
+      }
     }
   }
 

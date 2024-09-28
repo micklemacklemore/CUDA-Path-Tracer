@@ -95,7 +95,14 @@ struct ShadeableIntersection
 {
   float t;
   glm::vec3 surfaceNormal;
+  
+  // for textures
   glm::vec2 texSample; 
+
+  // for normal maps
+  glm::vec3 tangent; 
+  glm::vec3 bitangent;
+
   int materialId;
 
   __host__ __device__ bool operator<(const ShadeableIntersection& other) const
