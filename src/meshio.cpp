@@ -107,10 +107,40 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
     texIdx = it == prim.attributes.end() ? -1 : it->second; 
   }
 
-  // must at least have positions array!
-  if (posIdx == -1) {
+  // must at least have positions / index array!
+  if (posIdx == -1 || prim.indices == -1) {
     return false; 
   } 
+
+  // fill index array
+  {
+    tinygltf::Accessor& accessor = model.accessors[prim.indices];
+    tinygltf::BufferView& bufferview = model.bufferViews.at(accessor.bufferView);   // buffer views index is optional
+
+    // indices must be scalar
+    if (accessor.type != TINYGLTF_TYPE_SCALAR) {
+      return false;
+    }
+
+    tinygltf::Buffer& buffer = model.buffers[bufferview.buffer];
+
+    size_t offset = bufferview.byteOffset + accessor.byteOffset;
+    size_t count = accessor.count;
+
+    switch (accessor.componentType) {
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+      castToIntArray<glm::uint8>(buffer.data, offset, count, out_attr.indices);
+      break;
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+      castToIntArray<glm::uint16>(buffer.data, offset, count, out_attr.indices);
+      break;
+    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+      castToIntArray<glm::uint32>(buffer.data, offset, count, out_attr.indices);
+      break;
+    default:
+      return false;
+    }
+  }
 
   // fill positions array
   {
@@ -189,37 +219,6 @@ bool meshio::loadMesh(std::string filename, MeshAttributes& out_attr) {
 
     for (size_t i = 0; i < count; ++i) {
       out_attr.texcoords.emplace_back(glm::make_vec2(&tex[i * 2]));
-    }
-  }
-
-  // fill index array (if it exists)
-  out_attr.indices.clear(); 
-  if (prim.indices != -1) {
-    tinygltf::Accessor& accessor = model.accessors[prim.indices];
-    tinygltf::BufferView& bufferview = model.bufferViews.at(accessor.bufferView);   // buffer views index is optional
-
-    // indices must be scalar
-    if (accessor.type != TINYGLTF_TYPE_SCALAR) {
-      return false;
-    }
-
-    tinygltf::Buffer& buffer = model.buffers[bufferview.buffer];
-
-    size_t offset = bufferview.byteOffset + accessor.byteOffset;
-    size_t count = accessor.count;
-
-    switch (accessor.componentType) {
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-      castToIntArray<glm::uint8>(buffer.data, offset, count, out_attr.indices);
-      break; 
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-      castToIntArray<glm::uint16>(buffer.data, offset, count, out_attr.indices);
-      break;
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-      castToIntArray<glm::uint32>(buffer.data, offset, count, out_attr.indices);
-      break; 
-    default:
-      return false; 
     }
   }
 

@@ -7,6 +7,7 @@
 #include "glm/glm.hpp"
 #include "utilities.h"
 #include "sceneStructs.h"
+#include "meshio.h"
 
 using namespace std;
 
@@ -21,5 +22,6 @@ public:
 
     std::vector<Geom> geoms;
     std::vector<Material> materials;
+    std::vector<meshio::ImageData> textures; 
     RenderState state;
 };

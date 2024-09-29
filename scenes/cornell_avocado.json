@@ -7,6 +7,10 @@
             "RGB":[1.0, 1.0, 1.0],
             "EMITTANCE":10.0
         },
+        "default": {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
         "diffuse_white":
         {
             "TYPE":"Diffuse",
@@ -42,6 +46,14 @@
     },
     "Objects":
     [
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\Avocado.gltf",
+            "MATERIAL": "default",
+            "TRANS":[-2.1, 0.0, -2.0],
+            "ROTAT":[-30.0, 180.0, -20.0],
+            "SCALE":[100.0, 100.0, 100.0]
+        },
         {
             "TYPE":"cube",
             "MATERIAL":"light",

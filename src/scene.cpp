@@ -1,10 +1,15 @@
+#include "scene.h"
+#include "meshio.h"
+
+#include "json.hpp"
+
 #include <iostream>
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <unordered_map>
-#include "json.hpp"
-#include "scene.h"
+
+
 using json = nlohmann::json;
 
 Scene::Scene(string filename)
@@ -24,11 +29,17 @@ Scene::Scene(string filename)
     }
 }
 
-// TODO: incorporate glTF loading as part of the JSON
+
 void Scene::loadFromJSON(const std::string& jsonName)
 {
     std::ifstream f(jsonName);
     json data = json::parse(f);
+
+    // Get scene directory
+    std::string jsonDirPath = jsonName.substr(0, jsonName.rfind("\\") + 1); // token is "scott"
+
+    // Parse Materials
+
     const auto& materialsData = data["Materials"];
     std::unordered_map<std::string, uint32_t> MatNameToID;
     for (const auto& item : materialsData.items())
@@ -55,24 +66,31 @@ void Scene::loadFromJSON(const std::string& jsonName)
         }
         MatNameToID[name] = materials.size();
 
-        // TODO: We'd need to design a way to incorporate textures in the json
         newMaterial.textureIdx.albedo = -1; 
         newMaterial.textureIdx.normal = -1; 
 
         materials.emplace_back(newMaterial);
     }
+    
+    // Parse Objects
+
     const auto& objectsData = data["Objects"];
     for (const auto& p : objectsData)
     {
-        const auto& type = p["TYPE"];
+      const auto& type = p["TYPE"];
+      if (type != "mesh") {
         Geom newGeom;
         if (type == "cube")
         {
-            newGeom.type = CUBE;
+          newGeom.type = CUBE;
         }
-        else
+        else if (type == "sphere")
         {
-            newGeom.type = SPHERE;
+          newGeom.type = SPHERE;
+        }
+        else {
+          std::cerr << "loadFromJSON: do not recognise object type." << std::endl; 
+          std::exit(-1); 
         }
         newGeom.materialid = MatNameToID[p["MATERIAL"]];
         const auto& trans = p["TRANS"];
@@ -82,12 +100,84 @@ void Scene::loadFromJSON(const std::string& jsonName)
         newGeom.rotation = glm::vec3(rotat[0], rotat[1], rotat[2]);
         newGeom.scale = glm::vec3(scale[0], scale[1], scale[2]);
         newGeom.transform = utilityCore::buildTransformationMatrix(
-            newGeom.translation, newGeom.rotation, newGeom.scale);
+          newGeom.translation, newGeom.rotation, newGeom.scale);
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
 
         geoms.push_back(newGeom);
+      }
+      else {
+        meshio::MeshAttributes mesh;
+        const std::string filePath = p["PATH"]; 
+        if (!meshio::loadMesh(jsonDirPath + filePath, mesh)) {
+          std::cerr << "loadFromJSON: failed to load mesh: " << jsonDirPath + filePath << std::endl;
+          std::exit(-1);
+        }
+
+        // model transforms
+        const auto& trans = p["TRANS"];
+        const auto& rotat = p["ROTAT"];
+        const auto& scale = p["SCALE"];
+
+        glm::mat4 modelMat = utilityCore::buildTransformationMatrix(
+          glm::vec3(trans[0], trans[1], trans[2]),
+          glm::vec3(rotat[0], rotat[1], rotat[2]),
+          glm::vec3(scale[0], scale[1], scale[2])
+        ); 
+
+        glm::mat4 modelMatInvTrans = glm::inverseTranspose(modelMat); 
+
+        int materialId = MatNameToID[p["MATERIAL"]];
+
+        // fill textures if any
+        if (mesh.textureAlbedo.exists()) {
+          textures.emplace_back(std::move(mesh.textureAlbedo));
+          materials[materialId].textureIdx.albedo = textures.size() - 1; 
+        }
+
+        if (mesh.textureNormal.exists()) {
+          textures.emplace_back(std::move(mesh.textureNormal)); 
+          materials[materialId].textureIdx.normal = textures.size() - 1;
+        }
+
+        // fill positions
+        for (size_t idx = 0; idx < mesh.indices.size(); idx += 3) {
+          Geom tri;
+          tri.type = GeomType::TRIANGLE;
+
+          tri.trianglePos[0] = mesh.positions[mesh.indices[idx]];
+          tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
+          tri.trianglePos[2] = mesh.positions[mesh.indices[idx + 2]];
+
+          if (!mesh.normals.empty()) {
+            tri.triangleNor[0] = mesh.normals[mesh.indices[idx]];
+            tri.triangleNor[1] = mesh.normals[mesh.indices[idx + 1]];
+            tri.triangleNor[2] = mesh.normals[mesh.indices[idx + 2]];
+          }
+
+          if (!mesh.texcoords.empty()) {
+            tri.triangleTex[0] = mesh.texcoords[mesh.indices[idx]];
+            tri.triangleTex[1] = mesh.texcoords[mesh.indices[idx + 1]];
+            tri.triangleTex[2] = mesh.texcoords[mesh.indices[idx + 2]];
+          }
+
+          tri.trianglePos[0] = glm::vec3(modelMat * glm::vec4(tri.trianglePos[0], 1.)); 
+          tri.trianglePos[1] = glm::vec3(modelMat * glm::vec4(tri.trianglePos[1], 1.));
+          tri.trianglePos[2] = glm::vec3(modelMat * glm::vec4(tri.trianglePos[2], 1.));
+
+          tri.triangleNor[0] = glm::vec3(modelMatInvTrans * glm::vec4(tri.triangleNor[0], 1.)); 
+          tri.triangleNor[1] = glm::vec3(modelMatInvTrans * glm::vec4(tri.triangleNor[1], 1.));
+          tri.triangleNor[2] = glm::vec3(modelMatInvTrans * glm::vec4(tri.triangleNor[2], 1.));
+
+          tri.materialid = materialId;
+
+          geoms.push_back(tri); 
+        }
+      }  
     }
+
+    // Parse Camera 
+
     const auto& cameraData = data["Camera"];
     Camera& camera = state.camera;
     RenderState& state = this->state;
@@ -104,7 +194,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
     camera.lookAt = glm::vec3(lookat[0], lookat[1], lookat[2]);
     camera.up = glm::vec3(up[0], up[1], up[2]);
 
-    //calculate fov based on resolution
+    // Calculate fov based on resolution
     float yscaled = tan(fovy * (PI / 180));
     float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
     float fovx = (atan(xscaled) * 180) / PI;
@@ -116,7 +206,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
 
     camera.view = glm::normalize(camera.lookAt - camera.position);
 
-    //set up render camera stuff
+    // Set final render resolution
     int arraylen = camera.resolution.x * camera.resolution.y;
     state.image.resize(arraylen);
     std::fill(state.image.begin(), state.image.end(), glm::vec3());

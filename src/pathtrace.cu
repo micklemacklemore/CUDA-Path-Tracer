@@ -25,15 +25,15 @@
 
 #define SORT_BY_MATERIAL 0
 
-#define MESH_TEST 1
+#define MESH_TEST 0
 
 #define DEBUG_SKY_LIGHT 0
 #define DEBUG_SKY_LIGHT_BLACK_BG 1
 
-#define DEBUG_ONE_BOUNCE 1
+#define DEBUG_ONE_BOUNCE 0
 #define FORCE_NUM_BOUNCES 1
 
-#define DEBUG_NORMALS 1
+#define DEBUG_NORMALS 0
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -161,8 +161,6 @@ void pathtraceInit(Scene* scene)
     cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
     cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
 
-     
-
 #if MESH_TEST
       meshio::MeshAttributes mesh;
       // if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
@@ -245,9 +243,17 @@ void pathtraceInit(Scene* scene)
 
         scene->geoms.push_back(tri);
       }
-    
-
 #endif
+    for (const auto& tex : scene->textures) {
+      cudaArray_t cuArray;
+      cudaTextureObject_t texObj = 0;
+
+      loadTexturesToCUDADevice(cuArray, texObj, tex);
+
+      host_cuArray.push_back(cuArray);
+      host_textures.push_back(texObj);
+    }
+
     cudaMalloc(&dev_textures, host_textures.size() * sizeof(cudaTextureObject_t)); 
     cudaMemcpy(dev_textures, host_textures.data(), host_textures.size() * sizeof(cudaTextureObject_t), cudaMemcpyHostToDevice);
 

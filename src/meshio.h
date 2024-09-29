@@ -1,6 +1,7 @@
+#pragma once
+
 #include "tiny_gltf.h"
 #include "glm/glm.hpp"
-
 
 #include <string>
 
