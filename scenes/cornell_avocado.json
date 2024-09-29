@@ -11,6 +11,10 @@
             "TYPE":"Diffuse",
             "RGB":[0.98, 0.98, 0.98]
         },
+        "default_car": {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
         "diffuse_white":
         {
             "TYPE":"Diffuse",
@@ -53,6 +57,14 @@
             "TRANS":[-2.1, 0.0, -2.0],
             "ROTAT":[-30.0, 180.0, -20.0],
             "SCALE":[100.0, 100.0, 100.0]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\ToyCar\\ToyCar.gltf",
+            "MATERIAL": "default_car",
+            "TRANS":[1.0, 0.0, 1.0],
+            "ROTAT":[90.0, 0.0, 32.0],
+            "SCALE":[0.01, 0.01, 0.01]
         },
         {
             "TYPE":"cube",

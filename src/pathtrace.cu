@@ -428,9 +428,9 @@ __global__ void computeIntersections(
                 }
 
                 // This produces weird results, i'm not sure why
-                //if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
-                //  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
-                //}
+                if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
+                  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
+                }
               }
               else {
                 t = -1;
@@ -623,12 +623,6 @@ __global__ void shadeMaterial(
       }
 
       if (material.textureIdx.normal != -1) {
-        glm::vec3 T = glm::normalize(intersection.surfaceNormal);
-        glm::vec3 B = glm::normalize(intersection.bitangent);
-        glm::vec3 N = glm::normalize(intersection.tangent);
-
-        glm::mat3 TBN = glm::mat3(T, B, N);
-
         float4 texNorCol = tex2D<float4>(textures[material.textureIdx.normal], intersection.texSample.s, intersection.texSample.t);
         glm::vec3 normal = glm::vec3(texNorCol.x, texNorCol.y, texNorCol.z);
         normal = (normal * 2.f) - 1.f;
@@ -639,8 +633,7 @@ __global__ void shadeMaterial(
 
 #if DEBUG_NORMALS
       bsdfValue = intersection.surfaceNormal * INV_PI;
-#endif 
-
+#endif
       // convert vec3 into the world coordinate system (using surface normal)
       wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
 

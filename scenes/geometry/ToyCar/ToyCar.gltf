@@ -1,0 +1,279 @@
+{
+    "asset": {
+        "version": "2.0",
+        "generator": "babylon.js glTF exporter for 3dsmax 2020 v20200721.1",
+        "copyright": "Public domain (CC0). Toy car model created by Guido Odendahl. Materials edited by Eric Chadwick."
+    },
+    "extensionsUsed": [
+        "KHR_texture_transform",
+        "KHR_materials_clearcoat",
+        "KHR_materials_transmission",
+        "KHR_materials_sheen"
+    ],
+    "scene": 0,
+    "scenes": [
+        {
+            "nodes": [
+                0
+            ]
+        }
+    ],
+    "nodes": [
+        {
+            "name": "ToyCar",
+            "mesh": 0
+        }
+    ],
+    "cameras": [
+        {
+            "perspective": {
+                "yfov": 0.9,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera001"
+        },
+        {
+            "perspective": {
+                "yfov": 0.41,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera002"
+        },
+        {
+            "perspective": {
+                "yfov": 0.68,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera003"
+        },
+        {
+            "perspective": {
+                "yfov": 0.63,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera004"
+        },
+        {
+            "perspective": {
+                "yfov": 0.96,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera005"
+        },
+        {
+            "perspective": {
+                "yfov": 0.96,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera006"
+        },
+        {
+            "perspective": {
+                "yfov": 0.96,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera007"
+        },
+        {
+            "perspective": {
+                "yfov": 0.96,
+                "zfar": 2,
+                "znear": 0.001
+            },
+            "type": "perspective",
+            "name": "Camera008"
+        }
+    ],
+    "meshes": [
+        {
+            "primitives": [
+                {
+                    "attributes": {
+                        "POSITION": 1,
+                        "NORMAL": 2,
+                        "TEXCOORD_0": 3
+                    },
+                    "indices": 0,
+                    "material": 0
+                }
+            ],
+            "name": "ToyCar"
+        }
+    ],
+    "accessors": [
+        {
+            "bufferView": 0,
+            "componentType": 5125,
+            "count": 266511,
+            "type": "SCALAR",
+            "name": "accessorIndices"
+        },
+        {
+            "bufferView": 1,
+            "componentType": 5126,
+            "count": 66951,
+            "max": [
+                93.5376358,
+                189.744751,
+                -9.92424
+            ],
+            "min": [
+                -93.53764,
+                -194.049515,
+                -126.166245
+            ],
+            "type": "VEC3",
+            "name": "accessorPositions"
+        },
+        {
+            "bufferView": 1,
+            "byteOffset": 803412,
+            "componentType": 5126,
+            "count": 66951,
+            "type": "VEC3",
+            "name": "accessorNormals"
+        },
+        {
+            "bufferView": 2,
+            "componentType": 5126,
+            "count": 66951,
+            "type": "VEC2",
+            "name": "accessorUVs"
+        }
+    ],
+    "bufferViews": [
+        {
+            "buffer": 0,
+            "byteLength": 1186640,
+            "name": "bufferViewScalar",
+            "target": 34963
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 1186640,
+            "byteLength": 1858296,
+            "byteStride": 12,
+            "name": "bufferViewFloatVec3",
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteOffset": 3044936,
+            "byteLength": 619432,
+            "byteStride": 8,
+            "name": "bufferViewFloatVec2",
+            "target": 34962
+        }
+    ],
+    "buffers": [
+        {
+            "uri": "ToyCar.bin",
+            "byteLength": 3664368
+        }
+    ],
+    "materials": [
+        {
+            "name": "ToyCar",
+            "doubleSided": true,
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {
+                    "index": 2
+                },
+                "metallicRoughnessTexture": {
+                    "index": 3
+                }
+            },
+            "normalTexture": {
+                "index": 0
+            }
+        }
+    ],
+    "textures": [
+        {
+            "sampler": 0,
+            "source": 0,
+            "name": "ToyCar_normal.png"
+        },
+        {
+            "sampler": 0,
+            "source": 1,
+            "name": "ToyCar_emissive.png"
+        },
+        {
+            "sampler": 0,
+            "source": 2,
+            "name": "ToyCar_basecolor.png"
+        },
+        {
+            "sampler": 0,
+            "source": 3,
+            "name": "ToyCar_occlusion_roughness_metallic.png"
+        },
+        {
+            "sampler": 0,
+            "source": 4,
+            "name": "Fabric_normal.png"
+        },
+        {
+            "sampler": 0,
+            "source": 5,
+            "name": "Fabric_occlusion.png"
+        },
+        {
+            "sampler": 0,
+            "source": 6,
+            "name": "Fabric_baseColor.png"
+        },
+        {
+            "sampler": 0,
+            "source": 7,
+            "name": "ToyCar_clearcoat.png"
+        }
+    ],
+    "images": [
+        {
+            "uri": "ToyCar_normal.png"
+        },
+        {
+            "uri": "ToyCar_emissive.png"
+        },
+        {
+            "uri": "ToyCar_basecolor.png"
+        },
+        {
+            "uri": "ToyCar_occlusion_roughness_metallic.png"
+        },
+        {
+            "uri": "Fabric_normal.png"
+        },
+        {
+            "uri": "Fabric_occlusion.png"
+        },
+        {
+            "uri": "Fabric_baseColor.png"
+        },
+        {
+            "uri": "ToyCar_clearcoat.png"
+        }
+    ],
+    "samplers": [
+        {
+            "magFilter": 9729,
+            "minFilter": 9987
+        }
+    ]
+}
