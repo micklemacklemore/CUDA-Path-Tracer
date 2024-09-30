@@ -535,7 +535,6 @@ __device__ glm::vec3 worldToLocal(const glm::vec3& normal, const glm::vec3& vec)
   return glm::transpose(glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal))) * vec;
 }
 
-
 __global__ void shadeMaterial(
   int iter,
   int num_paths,
@@ -592,9 +591,30 @@ __global__ void shadeMaterial(
     }
     else if (material.hasReflective > 0.f) {              // SPECULAR
       glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
-      glm::vec3 wi = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
 
-      pathSegment.color *= material.color; 
+      // perfect specular direction
+      glm::vec3 R = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
+
+      float exponent = 30.f;  // TODO: this is the shininess, should come from the material
+
+      // sample random polar coordinates
+      float pol = acosf(powf(xi.x, 1.f / (exponent + 1.f)));
+      float azi = 2.f * PI * xi.y; 
+      /*float pdf = (exponent + 1.f) * powf(cosf(pol), exponent) * sinf(pol); 
+
+      if (pdf < EPSILON || isnan(pdf)) {
+        pathSegment.isTerminated = true;
+        pathSegments[idx] = pathSegment;
+        return;
+      }*/
+
+      // convert to cartesian coords
+      glm::vec3 wi(cosf(azi) * sinf(pol), sinf(azi) * sinf(pol), cosf(pol));
+      wi = glm::normalize(wi); 
+      wi = localToWorld(R, wi); 
+
+      pathSegment.color *= material.color;
+      pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
 
       // new ray for the next bounce
       pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction);
@@ -626,7 +646,6 @@ __global__ void shadeMaterial(
         float4 texNorCol = tex2D<float4>(textures[material.textureIdx.normal], intersection.texSample.s, intersection.texSample.t);
         glm::vec3 normal = glm::vec3(texNorCol.x, texNorCol.y, texNorCol.z);
         normal = (normal * 2.f) - 1.f;
-
         normal = glm::normalize(localToWorld(intersection.surfaceNormal, normal));
         intersection.surfaceNormal = normal; 
       }

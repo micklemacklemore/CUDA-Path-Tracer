@@ -44,6 +44,7 @@ struct Material
         float exponent;
         glm::vec3 color;
     } specular;
+
     struct
     {
       int albedo; 
@@ -51,8 +52,8 @@ struct Material
     } textureIdx;
 
     glm::vec3 color;
-    float hasReflective;
-    float hasRefractive;
+    float hasReflective;  // metalness (diffuse = (1. - hasReflective) )
+    float hasRefractive;  // transmission ? 
     float indexOfRefraction;
     float emittance;
 };
