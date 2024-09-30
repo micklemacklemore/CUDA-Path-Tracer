@@ -585,35 +585,32 @@ __global__ void shadeMaterial(
     thrust::uniform_real_distribution<float> u01(0, 1);
     xi.x = u01(rng); 
     xi.y = u01(rng); 
+    float isSpec = u01(rng); 
+
     if (material.emittance > 0.0f) {                      // LIGHT
       pathSegment.color *= (material.color * material.emittance);
       pathSegment.isFinished = true; 
     }
-    else if (material.hasReflective > 0.f) {              // SPECULAR
+    else if (material.hasReflective > 0.f && isSpec > 0.5) {              // SPECULAR
       glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
 
       // perfect specular direction
       glm::vec3 R = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
 
-      float exponent = 30.f;  // TODO: this is the shininess, should come from the material
+      float exponent = 300.f;  // TODO: this is the shininess, should come from the material
 
       // sample random polar coordinates
       float pol = acosf(powf(xi.x, 1.f / (exponent + 1.f)));
       float azi = 2.f * PI * xi.y; 
-      /*float pdf = (exponent + 1.f) * powf(cosf(pol), exponent) * sinf(pol); 
 
-      if (pdf < EPSILON || isnan(pdf)) {
-        pathSegment.isTerminated = true;
-        pathSegments[idx] = pathSegment;
-        return;
-      }*/
+      // using a PDF here just did not work for me so I didn't use one
 
       // convert to cartesian coords
       glm::vec3 wi(cosf(azi) * sinf(pol), sinf(azi) * sinf(pol), cosf(pol));
       wi = glm::normalize(wi); 
-      wi = localToWorld(R, wi); 
+      wi = localToWorld(intersection.surfaceNormal, wi); 
 
-      pathSegment.color *= material.color;
+      pathSegment.color *= material.color / 0.5f;
       pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
 
       // new ray for the next bounce
@@ -657,7 +654,10 @@ __global__ void shadeMaterial(
       wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
 
       // update throughput
-      pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf;
+      pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf; 
+      if (material.hasReflective > 0.f) {
+        pathSegment.color /= 0.5f; 
+      }
       pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f); 
 
       // new ray for the next bounce
