@@ -468,73 +468,6 @@ __global__ void computeIntersections(
     }
 }
 
-__device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
-  float x = xi.x;
-  float y = xi.y;
-  if (x == 0 && y == 0)
-    return glm::vec3(0, 0, 0);
-
-  float phi = 0.f;
-  float radius = 1.f;
-  float a = (2.f * x) - 1.f;
-  float b = (2.f * y) - 1.f;
-
-  // Uses squares instead of absolute values
-  if ((a * a) > (b * b)) {
-    // Top half
-    radius *= a;
-    phi = (PI / 4) * (b / a);
-  }
-  else {
-    // Bottom half
-    radius *= b;
-    phi = (PI / 2) - ((PI / 4) * (a / b));
-  }
-
-  // Map the distorted Polar coordinates (phi,radius)
-  // into the Cartesian (x,y) space
-  glm::vec3 disc(0.f, 0.f, 0.f);
-  disc.x = glm::cos(phi) * radius;
-  disc.y = glm::sin(phi) * radius;
-
-  // I think this ensures this is a hemisphere and not a sphere ? 
-  disc.z = glm::sqrt(1.f - (disc.x * disc.x) - (disc.y * disc.y));
-
-  return disc;
-}
-
-__device__ glm::vec3 localToWorld(const glm::vec3& normal, const glm::vec3& vec) {
-  glm::vec3 tangent, bitangent;
-
-  // create coordinate system from normal 
-  if (glm::abs(normal.x) > glm::abs(normal.y)) {
-    tangent = glm::vec3(-normal.z, 0, normal.x) / glm::sqrt(normal.x * normal.x + normal.z * normal.z);
-  }
-  else {
-    tangent = glm::vec3(0, normal.z, -normal.y) / glm::sqrt(normal.y * normal.y + normal.z * normal.z);
-  }
-    
-  bitangent = glm::cross(normal, tangent);
-
-  return glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal)) * vec; 
-}
-
-__device__ glm::vec3 worldToLocal(const glm::vec3& normal, const glm::vec3& vec) {
-  glm::vec3 tangent, bitangent;
-
-  // create coordinate system from normal 
-  if (glm::abs(normal.x) > glm::abs(normal.y)) {
-    tangent = glm::vec3(-normal.z, 0, normal.x) / glm::sqrt(normal.x * normal.x + normal.z * normal.z);
-  }
-  else {
-    tangent = glm::vec3(0, normal.z, -normal.y) / glm::sqrt(normal.y * normal.y + normal.z * normal.z);
-  }
-
-  bitangent = glm::cross(normal, tangent);
-
-  return glm::transpose(glm::mat3(glm::normalize(tangent), glm::normalize(bitangent), glm::normalize(normal))) * vec;
-}
-
 __global__ void shadeMaterial(
   int iter,
   int num_paths,
@@ -542,7 +475,7 @@ __global__ void shadeMaterial(
   PathSegment* pathSegments,
   Material* materials,
   int maxBounces, 
-  cudaTextureObject_t* textures
+  const cudaTextureObject_t* textures
   )
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -553,6 +486,7 @@ __global__ void shadeMaterial(
 
   PathSegment pathSegment = pathSegments[idx];
 
+  // isFinished means "we hit a light and we're done"
   if (pathSegment.isFinished) {
     return; 
   }
@@ -560,16 +494,8 @@ __global__ void shadeMaterial(
   ShadeableIntersection intersection = shadeableIntersections[idx];
 
   if (intersection.t <= 0.0f) {
-#if DEBUG_SKY_LIGHT && DEBUG_SKY_LIGHT_BLACK_BG
-    pathSegment.color *= pathSegment.remainingBounces == maxBounces ? glm::vec3(0.) : glm::vec3(1.);
-    pathSegment.isFinished = true;
-#elif DEBUG_SKY_LIGHT
-    pathSegment.color *= glm::vec3(1.); 
-    pathSegment.isFinished = true; 
-#else
     pathSegment.color = glm::vec3(0.0f);
     pathSegment.isTerminated = true; 
-#endif
   } 
   else if (pathSegment.remainingBounces <= 0) {
     pathSegment.color = glm::vec3(0.0f);
@@ -577,96 +503,9 @@ __global__ void shadeMaterial(
   }
   else {
     Material material = materials[intersection.materialId];
-    float pdf = 0.f;
-    glm::vec2 xi; 
-
-    // compute a random vec2
     thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pathSegment.remainingBounces);
-    thrust::uniform_real_distribution<float> u01(0, 1);
-    xi.x = u01(rng); 
-    xi.y = u01(rng); 
-    if (material.emittance > 0.0f) {                      // LIGHT
-      pathSegment.color *= (material.color * material.emittance);
-      pathSegment.isFinished = true; 
-    }
-    else if (material.hasReflective > 0.f) {              // SPECULAR
-      glm::vec3 wo = glm::normalize(pathSegment.ray.direction); 
 
-      // perfect specular direction
-      glm::vec3 R = glm::normalize(glm::reflect(wo, intersection.surfaceNormal)); 
-
-      float exponent = 30.f;  // TODO: this is the shininess, should come from the material
-
-      // sample random polar coordinates
-      float pol = acosf(powf(xi.x, 1.f / (exponent + 1.f)));
-      float azi = 2.f * PI * xi.y; 
-      /*float pdf = (exponent + 1.f) * powf(cosf(pol), exponent) * sinf(pol); 
-
-      if (pdf < EPSILON || isnan(pdf)) {
-        pathSegment.isTerminated = true;
-        pathSegments[idx] = pathSegment;
-        return;
-      }*/
-
-      // convert to cartesian coords
-      glm::vec3 wi(cosf(azi) * sinf(pol), sinf(azi) * sinf(pol), cosf(pol));
-      wi = glm::normalize(wi); 
-      wi = localToWorld(R, wi); 
-
-      pathSegment.color *= material.color;
-      pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
-
-      // new ray for the next bounce
-      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction);
-      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
-      pathSegment.ray.direction = wi;
-
-      --pathSegment.remainingBounces; 
-    }
-    else {                                                // DIFFUSE
-      // generate random direction in hemisphere
-      glm::vec3 wi = squareToHemisphereCosine(xi);
-
-      // get the pdf (square to hemisphere cosine)
-      pdf = glm::abs(wi.z) * INV_PI;
-
-      if (pdf < EPSILON || isnan(pdf)) {
-        pathSegment.isTerminated = true; 
-        pathSegments[idx] = pathSegment;
-        return; 
-      }
-
-      glm::vec3 bsdfValue = material.color * INV_PI; 
-      if (material.textureIdx.albedo != -1) {
-        float4 texCol = tex2D<float4>(textures[material.textureIdx.albedo], intersection.texSample.s, intersection.texSample.t); 
-        bsdfValue = glm::vec3(texCol.x, texCol.y, texCol.z) * material.color * INV_PI;
-      }
-
-      if (material.textureIdx.normal != -1) {
-        float4 texNorCol = tex2D<float4>(textures[material.textureIdx.normal], intersection.texSample.s, intersection.texSample.t);
-        glm::vec3 normal = glm::vec3(texNorCol.x, texNorCol.y, texNorCol.z);
-        normal = (normal * 2.f) - 1.f;
-        normal = glm::normalize(localToWorld(intersection.surfaceNormal, normal));
-        intersection.surfaceNormal = normal; 
-      }
-
-#if DEBUG_NORMALS
-      bsdfValue = intersection.surfaceNormal * INV_PI;
-#endif
-      // convert vec3 into the world coordinate system (using surface normal)
-      wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
-
-      // update throughput
-      pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, intersection.surfaceNormal)) / pdf;
-      pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f); 
-
-      // new ray for the next bounce
-      pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction); 
-      pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
-      pathSegment.ray.direction = wi; 
-
-      --pathSegment.remainingBounces;
-    }
+    scatterRay(pathSegment, intersection, material, textures, rng); 
   }
 
   // read back into global memory

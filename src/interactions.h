@@ -29,9 +29,9 @@
  *
  * You may need to change the parameter list for your purposes!
  */
-__host__ __device__ void scatterRay(
+__device__ void scatterRay(
     PathSegment& pathSegment,
-    glm::vec3 intersect,
-    glm::vec3 normal,
+    ShadeableIntersection& intersection,
     const Material& m,
+    const cudaTextureObject_t* textures, 
     thrust::default_random_engine& rng);
