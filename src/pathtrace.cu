@@ -30,12 +30,10 @@
 //#define DEBUG_SKY_LIGHT_BLACK_BG 1
 //#define DEBUG_NORMALS 0
 
-#define DEBUG_ONE_BOUNCE 1
+#define DEBUG_ONE_BOUNCE 0
 #define FORCE_NUM_BOUNCES 1
 
 #define BOUNDING_BOX_TEST 0
-
-
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -282,41 +280,54 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 
 // TODO!!!
-__device__ void computeMeshIntersection(const PathSegment& pathSegment, const Geom& geom, const Triangle* const tris, float& t) {
-  glm::vec3 intersect_point;
-  glm::vec3 normal;
-  glm::vec2 uvSample;
+__device__ float meshIntersectionTest(const Geom& geom, const Triangle* tris, const Ray& ray, glm::vec3& normal, glm::vec2& uvSample) {
+  float t = -1.f;
   float t_min = FLT_MAX;
-  int hit_geom_index = -1;
-  bool outside = true;
-  GeomType type;
+  bool somethingWasHit = false; 
 
-  GeomType tmp_type;
   glm::vec2 tmp_uvSample;
-  glm::vec3 tmp_intersect;
   glm::vec3 tmp_normal;
+
+  glm::vec3 tmp_intersect; // dummy variable
+  if (!HitBoundingBox(geom.minBoundingBox, geom.maxBoundingBox, ray.origin, ray.direction, tmp_intersect)) {
+    return -1; 
+  }
 
   for (int i = 0; i < geom.triNum; ++i) {
     glm::vec3 bary;
     Triangle tri = tris[geom.triStart + i]; 
 
-    if (glm::intersectRayTriangle(pathSegment.ray.origin, pathSegment.ray.direction, tri.trianglePos[0], tri.trianglePos[1], tri.trianglePos[2], bary)) {
+    if (glm::intersectRayTriangle(ray.origin, ray.direction, tri.trianglePos[0], tri.trianglePos[1], tri.trianglePos[2], bary)) {
       t = bary.z;
 
       // calculate normal
       tmp_normal = bary.x * tri.triangleNor[1] + bary.y * tri.triangleNor[2] + (1.0f - bary.x - bary.y) * tri.triangleNor[0];
       tmp_normal = glm::normalize(tmp_normal);
+
+      // calculate texture sample
       tmp_uvSample = bary.x * tri.triangleTex[1] + bary.y * tri.triangleTex[2] + (1.0f - bary.x - bary.y) * tri.triangleTex[0];
 
-      // this ensures double-sidedness (i think...)
-      if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
-        tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
-      }
+      // TODO: this is supposed to ensure double sidedness, but it seems to do nothing?!
+      //if (glm::dot(ray.direction, tmp_normal) > 0) {
+      //  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
+      //}
     }
     else {
-      t = -1;
+      t = -1.f; 
+    }
+
+    // Compute the minimum t from the intersection tests to determine what
+    // scene geometry object was hit first.
+    if (t > 0.0f && t_min > t)
+    {
+      t_min = t;
+      normal = tmp_normal;
+      uvSample = tmp_uvSample;
+      somethingWasHit = true; 
     }
   }
+
+  return somethingWasHit ? t_min : -1.f; 
 }
 
 __global__ void computeIntersections(
@@ -326,7 +337,6 @@ __global__ void computeIntersections(
   Geom* geoms,
   int geoms_size,
   Triangle* tris,
-  int tris_size,
   ShadeableIntersection* intersections
 )
 {
@@ -337,17 +347,15 @@ __global__ void computeIntersections(
         PathSegment pathSegment = pathSegments[path_index];
 
         float t;
-        glm::vec3 intersect_point;
+        glm::vec3 intersect_point; // not used?
+        bool outside = true;  // not used?
         glm::vec3 normal;
         glm::vec2 uvSample; 
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
-        bool outside = true;
-        GeomType type; 
-        
-        GeomType tmp_type; 
+
+        glm::vec3 tmp_intersect;  // not used?
         glm::vec2 tmp_uvSample; 
-        glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
 
         // naive parse through global geoms
@@ -359,22 +367,14 @@ __global__ void computeIntersections(
             if (geom.type == CUBE)
             {
                 t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-                tmp_type = geom.type; 
             }
             else if (geom.type == SPHERE)
             {
                 t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
-                tmp_type = geom.type; 
             }
-            else if (geom.type == MESH) {
-              if (HitBoundingBox(geom.minBoundingBox, geom.maxBoundingBox, pathSegment.ray.origin, pathSegment.ray.direction, tmp_intersect)) {
-                t = glm::length(tmp_intersect - pathSegment.ray.origin);
-                tmp_normal = glm::vec3(1., 0., 0.);
-                tmp_type = geom.type; 
-              }
-              else {
-                t = -1; 
-              }
+            else if (geom.type == MESH) 
+            {
+                t = meshIntersectionTest(geom, tris, pathSegment.ray, tmp_normal, tmp_uvSample); 
             }
 
             // Compute the minimum t from the intersection tests to determine what
@@ -383,10 +383,9 @@ __global__ void computeIntersections(
             {
                 t_min = t;
                 hit_geom_index = i;
-                intersect_point = tmp_intersect;
                 normal = tmp_normal;
                 uvSample = tmp_uvSample; 
-                type = tmp_type; 
+                intersect_point = tmp_intersect;  // not used?
             }
         }
 
@@ -394,11 +393,6 @@ __global__ void computeIntersections(
         {
             intersections[path_index].t = -1.0f;
         }
-#if 0 
-        else if (type == MESH) {
-          // triangle test here
-        }
-#endif
         else
         {
             // The ray hits something
@@ -551,8 +545,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_geoms,
             hst_scene->geoms.size(),
-            dev_tris, 
-            hst_scene->tris.size(),
+            dev_tris,
             dev_intersections
         );
         checkCUDAError("trace one bounce");

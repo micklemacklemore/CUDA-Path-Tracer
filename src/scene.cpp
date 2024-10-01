@@ -145,7 +145,6 @@ void Scene::loadFromJSON(const std::string& jsonName)
         }
 
         geom.triStart = tris.size(); 
-        geom.triNum = mesh.indices.size(); 
 
         glm::vec3 min(FLT_MAX);
         glm::vec3 max(-FLT_MAX); 
@@ -192,6 +191,7 @@ void Scene::loadFromJSON(const std::string& jsonName)
 
         geom.minBoundingBox = min; 
         geom.maxBoundingBox = max; 
+        geom.triNum = tris.size() - geom.triStart; 
 
         geoms.push_back(geom); 
       }  
