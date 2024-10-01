@@ -6,6 +6,8 @@
 #include "sceneStructs.h"
 #include "utilities.h"
 
+__host__ __device__ bool HitBoundingBox(const glm::vec3& minB, const glm::vec3& maxB, const glm::vec3& origin, const glm::vec3& direction, glm::vec3& coord);
+
 /**
  * Handy-dandy hash function that provides seeds for random number generation.
  */

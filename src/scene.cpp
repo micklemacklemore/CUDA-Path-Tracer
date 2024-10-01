@@ -7,6 +7,7 @@
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
+#include <glm/common.hpp>
 #include <unordered_map>
 
 
@@ -107,12 +108,16 @@ void Scene::loadFromJSON(const std::string& jsonName)
         geoms.push_back(newGeom);
       }
       else {
+        // MESH TYPE
         meshio::MeshAttributes mesh;
         const std::string filePath = p["PATH"]; 
         if (!meshio::loadMesh(jsonDirPath + filePath, mesh)) {
           std::cerr << "loadFromJSON: failed to load mesh: " << jsonDirPath + filePath << std::endl;
           std::exit(-1);
         }
+
+        Geom geom; 
+        geom.type = MESH; 
 
         // model transforms
         const auto& trans = p["TRANS"];
@@ -124,26 +129,30 @@ void Scene::loadFromJSON(const std::string& jsonName)
           glm::vec3(rotat[0], rotat[1], rotat[2]),
           glm::vec3(scale[0], scale[1], scale[2])
         ); 
-
         glm::mat4 modelMatInvTrans = glm::inverseTranspose(modelMat); 
 
-        int materialId = MatNameToID[p["MATERIAL"]];
+        geom.materialid = MatNameToID[p["MATERIAL"]];;
 
         // fill textures if any
         if (mesh.textureAlbedo.exists()) {
           textures.emplace_back(std::move(mesh.textureAlbedo));
-          materials[materialId].textureIdx.albedo = textures.size() - 1; 
+          materials[geom.materialid].textureIdx.albedo = textures.size() - 1;
         }
 
         if (mesh.textureNormal.exists()) {
           textures.emplace_back(std::move(mesh.textureNormal)); 
-          materials[materialId].textureIdx.normal = textures.size() - 1;
+          materials[geom.materialid].textureIdx.normal = textures.size() - 1;
         }
+
+        geom.triStart = tris.size(); 
+        geom.triNum = mesh.indices.size(); 
+
+        glm::vec3 min(FLT_MAX);
+        glm::vec3 max(-FLT_MAX); 
 
         // fill positions
         for (size_t idx = 0; idx < mesh.indices.size(); idx += 3) {
-          Geom tri;
-          tri.type = GeomType::TRIANGLE;
+          Triangle tri;
 
           tri.trianglePos[0] = mesh.positions[mesh.indices[idx]];
           tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
@@ -169,10 +178,22 @@ void Scene::loadFromJSON(const std::string& jsonName)
           tri.triangleNor[1] = glm::vec3(modelMatInvTrans * glm::vec4(tri.triangleNor[1], 1.));
           tri.triangleNor[2] = glm::vec3(modelMatInvTrans * glm::vec4(tri.triangleNor[2], 1.));
 
-          tri.materialid = materialId;
+          tris.push_back(tri); 
 
-          geoms.push_back(tri); 
+          // update min and max
+          max = glm::max(max, tri.trianglePos[0]); 
+          max = glm::max(max, tri.trianglePos[1]);
+          max = glm::max(max, tri.trianglePos[2]);
+          
+          min = glm::min(min, tri.trianglePos[0]); 
+          min = glm::min(min, tri.trianglePos[1]);
+          min = glm::min(min, tri.trianglePos[2]);
         }
+
+        geom.minBoundingBox = min; 
+        geom.maxBoundingBox = max; 
+
+        geoms.push_back(geom); 
       }  
     }
 

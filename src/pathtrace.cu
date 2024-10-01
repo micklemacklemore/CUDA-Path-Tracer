@@ -25,15 +25,16 @@
 
 #define SORT_BY_MATERIAL 0
 
-#define MESH_TEST 0
+//#define MESH_TEST 0
+//#define DEBUG_SKY_LIGHT 0
+//#define DEBUG_SKY_LIGHT_BLACK_BG 1
+//#define DEBUG_NORMALS 0
 
-#define DEBUG_SKY_LIGHT 0
-#define DEBUG_SKY_LIGHT_BLACK_BG 1
-
-#define DEBUG_ONE_BOUNCE 0
+#define DEBUG_ONE_BOUNCE 1
 #define FORCE_NUM_BOUNCES 1
 
-#define DEBUG_NORMALS 0
+#define BOUNDING_BOX_TEST 0
+
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -95,12 +96,13 @@ static Scene* hst_scene = nullptr;
 static GuiDataContainer* guiData = nullptr;
 static glm::vec3* dev_image = nullptr;
 static Geom* dev_geoms = nullptr;
+static Triangle* dev_tris = nullptr; 
 static Material* dev_materials = nullptr;
 static PathSegment* dev_paths = nullptr;
 static ShadeableIntersection* dev_intersections = nullptr;
 // need to keep a versions of cuda tex objects and cuda arrays in host so that we can still free it later
-static std::vector<cudaTextureObject_t> host_textures;  // TODO: this should really be part of Scene!
-static std::vector<cudaArray_t> host_cuArray; // TODO: do i need to free this? 
+static std::vector<cudaTextureObject_t> host_textures; 
+static std::vector<cudaArray_t> host_cuArray;  
 static cudaTextureObject_t* dev_textures = nullptr; 
 static thrust::device_ptr<PathSegment> thrust_dev_paths = nullptr; 
 static thrust::device_ptr<ShadeableIntersection> thrust_dev_intersections = nullptr;
@@ -161,89 +163,6 @@ void pathtraceInit(Scene* scene)
     cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
     cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
 
-#if MESH_TEST
-      meshio::MeshAttributes mesh;
-      // if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
-      if (!meshio::loadMesh("../scenes/geometry/Avocado.gltf", mesh)) {
-        std::cerr << "Failed to load test mesh" << std::endl;
-        std::exit(-1);
-      }
-
-      scene->geoms.clear(); 
-
-      Material test_mat{};
-
-      test_mat.color = glm::vec3(197, 227, 234);  // light blue
-      test_mat.color /= 255.f;
-      test_mat.specular.color = glm::vec3(0.);
-      test_mat.specular.exponent = 0.;
-      test_mat.textureIdx.albedo = -1;
-      test_mat.textureIdx.normal = -1;
-
-      glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-
-      if (mesh.textureAlbedo.exists()) {
-        cudaArray_t cuArrayAlbedo;
-        cudaTextureObject_t texObjAlbedo = 0;
-
-        loadTexturesToCUDADevice(cuArrayAlbedo, texObjAlbedo, mesh.textureAlbedo);
-
-        host_cuArray.push_back(cuArrayAlbedo);
-        host_textures.push_back(texObjAlbedo);
-
-        test_mat.textureIdx.albedo = host_textures.size() - 1;
-      }
-
-      if (mesh.textureNormal.exists()) {
-        cudaArray_t cuArrayNormal;
-        cudaTextureObject_t texObjNormal = 0;
-
-        loadTexturesToCUDADevice(cuArrayNormal, texObjNormal, mesh.textureNormal);
-
-        host_cuArray.push_back(cuArrayNormal);
-        host_textures.push_back(texObjNormal);
-
-        test_mat.textureIdx.normal = host_textures.size() - 1;
-      }
-
-      scene->materials.push_back(test_mat);
-
-      for (size_t idx = 0; idx < mesh.indices.size(); idx += 3) {
-        Geom tri;
-        tri.type = GeomType::TRIANGLE;
-        tri.trianglePos[0] = mesh.positions[mesh.indices[idx]];
-        tri.trianglePos[1] = mesh.positions[mesh.indices[idx + 1]];
-        tri.trianglePos[2] = mesh.positions[mesh.indices[idx + 2]];
-
-        tri.triangleNor[0] = mesh.normals[mesh.indices[idx]];
-        tri.triangleNor[1] = mesh.normals[mesh.indices[idx + 1]];
-        tri.triangleNor[2] = mesh.normals[mesh.indices[idx + 2]];
-
-        tri.triangleTex[0] = mesh.texcoords[mesh.indices[idx]];
-        tri.triangleTex[1] = mesh.texcoords[mesh.indices[idx + 1]];
-        tri.triangleTex[2] = mesh.texcoords[mesh.indices[idx + 2]];
-
-        // for material.gltf
-
-        /*tri.trianglePos[0].y += 5.;
-        tri.trianglePos[1].y += 5.;
-        tri.trianglePos[2].y += 5.;*/
-
-        // for the avocado
-
-        tri.trianglePos[0] *= 100.f;
-        tri.trianglePos[1] *= 100.f;
-        tri.trianglePos[2] *= 100.f;
-
-        tri.trianglePos[0] = glm::vec3(model * glm::vec4(tri.trianglePos[0], 1.f));
-        tri.trianglePos[1] = glm::vec3(model * glm::vec4(tri.trianglePos[1], 1.f));
-        tri.trianglePos[2] = glm::vec3(model * glm::vec4(tri.trianglePos[2], 1.f));
-
-        tri.materialid = scene->materials.size() - 1;
-
-        scene->geoms.push_back(tri);
-      }
-#endif
     for (const auto& tex : scene->textures) {
       cudaArray_t cuArray;
       cudaTextureObject_t texObj = 0;
@@ -254,11 +173,37 @@ void pathtraceInit(Scene* scene)
       host_textures.push_back(texObj);
     }
 
+#if BOUNDING_BOX_TEST
+    static bool addBox = true;
+
+    if (addBox) {
+      Geom box;
+      Material mat{};
+
+      box.type = MESH; 
+      box.minBoundingBox = glm::vec3(0., 0., -3.);
+      box.maxBoundingBox = glm::vec3(3., 3., 0.);
+      mat.color = glm::vec3(1., 0., 1.);
+      mat.hasReflective = 0.; 
+      mat.textureIdx.albedo = -1; 
+      mat.textureIdx.normal = -1; 
+      box.materialid = scene->materials.size(); 
+
+      scene->materials.push_back(mat); 
+      scene->geoms.push_back(box); 
+
+      addBox = false; 
+    }
+#endif
+
     cudaMalloc(&dev_textures, host_textures.size() * sizeof(cudaTextureObject_t)); 
     cudaMemcpy(dev_textures, host_textures.data(), host_textures.size() * sizeof(cudaTextureObject_t), cudaMemcpyHostToDevice);
 
     cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
     cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
+
+    cudaMalloc(&dev_tris, scene->tris.size() * sizeof(Triangle)); 
+    cudaMemcpy(dev_tris, scene->tris.data(), scene->tris.size() * sizeof(Triangle), cudaMemcpyHostToDevice); 
 
     cudaMalloc(&dev_materials, scene->materials.size() * sizeof(Material));
     cudaMemcpy(dev_materials, scene->materials.data(), scene->materials.size() * sizeof(Material), cudaMemcpyHostToDevice);
@@ -280,6 +225,7 @@ void pathtraceFree()
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
     cudaFree(dev_textures);
+    cudaFree(dev_tris); 
     
     for (auto& cuArray : host_cuArray) {
       cudaFreeArray(cuArray);
@@ -334,12 +280,53 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     }
 }
 
+
+// TODO!!!
+__device__ void computeMeshIntersection(const PathSegment& pathSegment, const Geom& geom, const Triangle* const tris, float& t) {
+  glm::vec3 intersect_point;
+  glm::vec3 normal;
+  glm::vec2 uvSample;
+  float t_min = FLT_MAX;
+  int hit_geom_index = -1;
+  bool outside = true;
+  GeomType type;
+
+  GeomType tmp_type;
+  glm::vec2 tmp_uvSample;
+  glm::vec3 tmp_intersect;
+  glm::vec3 tmp_normal;
+
+  for (int i = 0; i < geom.triNum; ++i) {
+    glm::vec3 bary;
+    Triangle tri = tris[geom.triStart + i]; 
+
+    if (glm::intersectRayTriangle(pathSegment.ray.origin, pathSegment.ray.direction, tri.trianglePos[0], tri.trianglePos[1], tri.trianglePos[2], bary)) {
+      t = bary.z;
+
+      // calculate normal
+      tmp_normal = bary.x * tri.triangleNor[1] + bary.y * tri.triangleNor[2] + (1.0f - bary.x - bary.y) * tri.triangleNor[0];
+      tmp_normal = glm::normalize(tmp_normal);
+      tmp_uvSample = bary.x * tri.triangleTex[1] + bary.y * tri.triangleTex[2] + (1.0f - bary.x - bary.y) * tri.triangleTex[0];
+
+      // this ensures double-sidedness (i think...)
+      if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
+        tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
+      }
+    }
+    else {
+      t = -1;
+    }
+  }
+}
+
 __global__ void computeIntersections(
   int depth,
   int num_paths,
   PathSegment* pathSegments,
   Geom* geoms,
   int geoms_size,
+  Triangle* tris,
+  int tris_size,
   ShadeableIntersection* intersections
 )
 {
@@ -356,14 +343,12 @@ __global__ void computeIntersections(
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
         bool outside = true;
-        glm::vec3 bitangent;
-        glm::vec3 tangent;
-
+        GeomType type; 
+        
+        GeomType tmp_type; 
         glm::vec2 tmp_uvSample; 
         glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
-        glm::vec3 tmp_bitangent; 
-        glm::vec3 tmp_tangent; 
 
         // naive parse through global geoms
 
@@ -374,66 +359,21 @@ __global__ void computeIntersections(
             if (geom.type == CUBE)
             {
                 t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                tmp_type = geom.type; 
             }
             else if (geom.type == SPHERE)
             {
                 t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                tmp_type = geom.type; 
             }
-            else if (geom.type == TRIANGLE) {
-              glm::vec3 bary; 
-
-
-              if (glm::intersectRayTriangle(pathSegment.ray.origin, pathSegment.ray.direction, geom.trianglePos[0], geom.trianglePos[1], geom.trianglePos[2], bary)) {
-                t = bary.z;
-
-                // calculate normal
-                tmp_normal = bary.x * geom.triangleNor[1] + bary.y * geom.triangleNor[2] + (1.0f - bary.x - bary.y) * geom.triangleNor[0];
-                tmp_normal = glm::normalize(tmp_normal); 
-                tmp_uvSample = bary.x * geom.triangleTex[1] + bary.y * geom.triangleTex[2] + (1.0f - bary.x - bary.y) * geom.triangleTex[0];
-
-                // calculate tangents and bitangents (TODO: this should be precalculated)
-                glm::vec3 edge1 = geom.trianglePos[1] - geom.trianglePos[0];
-                glm::vec3 edge2 = geom.trianglePos[2] - geom.trianglePos[0];
-                glm::vec2 deltaUV1 = geom.triangleTex[1] - geom.triangleTex[0]; 
-                glm::vec2 deltaUV2 = geom.triangleTex[2] - geom.triangleTex[0];
-
-                //float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                // Avoid division by zero or near-zero values
-                float f = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
-                if (fabs(f) < 1e-6) {
-                  f = 1.0f; // Prevent degenerate UV triangles
-                }
-                else {
-                  f = 1.0f / f;
-                }
-
-                tmp_tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
-                tmp_tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
-                tmp_tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-
-                tmp_bitangent.x = f * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
-                tmp_bitangent.y = f * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
-                tmp_bitangent.z = f * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
-
-                // Normalize tangent and bitangent
-                tmp_tangent = glm::normalize(tmp_tangent);
-                tmp_bitangent = glm::normalize(tmp_bitangent);
-
-                // Orthogonalize tangent to the normal
-                tmp_tangent = glm::normalize(tmp_tangent - glm::dot(tmp_tangent, tmp_normal) * tmp_normal);
-
-                // Ensure correct handedness of tangent space
-                if (glm::dot(glm::cross(tmp_tangent, tmp_bitangent), tmp_normal) < 0.0f) {
-                  tmp_bitangent = -tmp_bitangent;
-                }
-
-                // This produces weird results, i'm not sure why
-                if (glm::dot(pathSegment.ray.direction, tmp_normal) > 0) {
-                  tmp_normal = -tmp_normal; // Flip the normal if the ray is hitting the backface
-                }
+            else if (geom.type == MESH) {
+              if (HitBoundingBox(geom.minBoundingBox, geom.maxBoundingBox, pathSegment.ray.origin, pathSegment.ray.direction, tmp_intersect)) {
+                t = glm::length(tmp_intersect - pathSegment.ray.origin);
+                tmp_normal = glm::vec3(1., 0., 0.);
+                tmp_type = geom.type; 
               }
               else {
-                t = -1;
+                t = -1; 
               }
             }
 
@@ -446,8 +386,7 @@ __global__ void computeIntersections(
                 intersect_point = tmp_intersect;
                 normal = tmp_normal;
                 uvSample = tmp_uvSample; 
-                tangent = tmp_tangent; 
-                bitangent = tmp_bitangent; 
+                type = tmp_type; 
             }
         }
 
@@ -455,6 +394,11 @@ __global__ void computeIntersections(
         {
             intersections[path_index].t = -1.0f;
         }
+#if 0 
+        else if (type == MESH) {
+          // triangle test here
+        }
+#endif
         else
         {
             // The ray hits something
@@ -462,8 +406,6 @@ __global__ void computeIntersections(
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
             intersections[path_index].surfaceNormal = normal;
             intersections[path_index].texSample = uvSample; 
-            intersections[path_index].tangent = tangent; 
-            intersections[path_index].bitangent = bitangent; 
         }
     }
 }
@@ -609,6 +551,8 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_paths,
             dev_geoms,
             hst_scene->geoms.size(),
+            dev_tris, 
+            hst_scene->tris.size(),
             dev_intersections
         );
         checkCUDAError("trace one bounce");

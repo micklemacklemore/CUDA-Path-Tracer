@@ -21,6 +21,7 @@ public:
     ~Scene();
 
     std::vector<Geom> geoms;
+    std::vector<Triangle> tris; 
     std::vector<Material> materials;
     std::vector<meshio::ImageData> textures; 
     RenderState state;

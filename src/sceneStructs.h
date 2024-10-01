@@ -11,6 +11,7 @@ enum GeomType
 {
     SPHERE,
     CUBE,
+    MESH,
     TRIANGLE
 };
 
@@ -31,10 +32,17 @@ struct Geom
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
 
-    // triangle attributes
-    glm::vec3 trianglePos[3];  
-    glm::vec3 triangleNor[3]; 
-    glm::vec2 triangleTex[3]; 
+    // MESH type parameters
+    glm::vec3 minBoundingBox; 
+    glm::vec3 maxBoundingBox;
+    size_t triStart; 
+    size_t triNum; 
+};
+
+struct Triangle {
+  glm::vec3 trianglePos[3];
+  glm::vec3 triangleNor[3];
+  glm::vec2 triangleTex[3];
 };
 
 struct Material
@@ -99,10 +107,6 @@ struct ShadeableIntersection
   
   // for textures
   glm::vec2 texSample; 
-
-  // for normal maps
-  glm::vec3 tangent; 
-  glm::vec3 bitangent;
 
   int materialId;
 

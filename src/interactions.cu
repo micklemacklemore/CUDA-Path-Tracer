@@ -79,7 +79,7 @@ __device__ void scatterRay(
   thrust::uniform_real_distribution<float> u01(0, 1);
   glm::vec2 xi(u01(rng), u01(rng));
   float pdf = 0.0f; 
-  glm::vec3 materialColor; 
+  glm::vec3 materialColor = m.color; 
   glm::vec3 normal = intersection.surfaceNormal; 
 
   if (m.textureIdx.albedo != -1) {
@@ -104,7 +104,7 @@ __device__ void scatterRay(
     // perfect specular direction
     glm::vec3 wi = glm::normalize(glm::reflect(wo, normal));
 
-    pathSegment.color *= m.color;
+    pathSegment.color *= materialColor;
     pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
 
     // new ray for the next bounce
@@ -126,7 +126,7 @@ __device__ void scatterRay(
       return;
     }
 
-    glm::vec3 bsdfValue = m.color * INV_PI;
+    glm::vec3 bsdfValue = materialColor * INV_PI;
 
     // convert vec3 into the world coordinate system (using surface normal)
     wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
