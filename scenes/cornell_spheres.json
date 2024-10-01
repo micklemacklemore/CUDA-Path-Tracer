@@ -87,63 +87,63 @@
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[-3.2,2.0,-3.2],
+            "TRANS":[-3.2,4.0,-3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         }, 
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[0.0,2.0,-3.2],
+            "TRANS":[0.0,4.0,-3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[3.2,2.0,-3.2],
+            "TRANS":[3.2,4.0,-3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[-3.2,2.0, 0.0],
+            "TRANS":[-3.2,4.0, 0.0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[0.0,2.0, 0.0],
+            "TRANS":[0.0,4.0, 0.0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[3.2,2.0, 0.0],
+            "TRANS":[3.2,4.0, 0.0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[-3.2,2.0,3.2],
+            "TRANS":[-3.2,4.0,3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[0.0,2.0,3.2],
+            "TRANS":[0.0,4.0,3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"diffuse_white",
-            "TRANS":[3.2,2.0,3.2],
+            "TRANS":[3.2,4.0,3.2],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[1.5,1.5,1.5]
         }        

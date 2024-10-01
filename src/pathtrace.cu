@@ -233,25 +233,25 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
         thrust::uniform_real_distribution<float> u01(0, 1);
 
-        // focal length
-        float focalLength = 3.f; 
-        float blur = 2.f; 
+        // anti-alias jitter
+        float jitterX = (u01(rng) - 0.5f) * cam.pixelLength.x * 150.f;  // we multiply by some constant until it looks good?
+        float jitterY = (u01(rng) - 0.5f) * cam.pixelLength.y * 150.f;
 
-        // calculate random ray within aperture
-        float apertureX = u01(rng) * blur;
-        float apertureY = u01(rng) * blur;
-
-        segment.ray.origin = cam.position;
-        segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
-
-        float jitterX = (u01(rng) - 0.5f) * cam.pixelLength.x * 100.f;  // Random offset in X ([-0.5, 0.5])
-        float jitterY = (u01(rng) - 0.5f) * cam.pixelLength.y * 100.f;  // Random offset in Y ([-0.5, 0.5])
-
-        segment.ray.direction = glm::normalize(cam.view
-            - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f + jitterX)
+        glm::vec3 direction = glm::normalize(cam.view
+            - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f + jitterX) 
             - cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f + jitterY)
         );
 
+        // Depth of field
+        float focalLength = 6.f;
+        float blur = 0.7f;
+        float apertureX = (u01(rng) - 0.5f) * blur;
+        float apertureY = (u01(rng) - 0.5f) * blur;
+        glm::vec3 convergence = cam.position + (focalLength * direction);
+
+        segment.ray.origin = cam.position + glm::vec3(apertureX, apertureY, 0.f); 
+        segment.ray.direction = glm::normalize(convergence - segment.ray.origin); 
+        segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
         segment.isFinished = false; 
