@@ -33,8 +33,6 @@
 #define DEBUG_ONE_BOUNCE 0
 #define FORCE_NUM_BOUNCES 1
 
-#define BOUNDING_BOX_TEST 0
-
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
 void checkCUDAErrorFn(const char* msg, const char* file, int line)
@@ -171,29 +169,6 @@ void pathtraceInit(Scene* scene)
       host_textures.push_back(texObj);
     }
 
-#if BOUNDING_BOX_TEST
-    static bool addBox = true;
-
-    if (addBox) {
-      Geom box;
-      Material mat{};
-
-      box.type = MESH; 
-      box.minBoundingBox = glm::vec3(0., 0., -3.);
-      box.maxBoundingBox = glm::vec3(3., 3., 0.);
-      mat.color = glm::vec3(1., 0., 1.);
-      mat.hasReflective = 0.; 
-      mat.textureIdx.albedo = -1; 
-      mat.textureIdx.normal = -1; 
-      box.materialid = scene->materials.size(); 
-
-      scene->materials.push_back(mat); 
-      scene->geoms.push_back(box); 
-
-      addBox = false; 
-    }
-#endif
-
     cudaMalloc(&dev_textures, host_textures.size() * sizeof(cudaTextureObject_t)); 
     cudaMemcpy(dev_textures, host_textures.data(), host_textures.size() * sizeof(cudaTextureObject_t), cudaMemcpyHostToDevice);
 
@@ -255,16 +230,22 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     if (x < cam.resolution.x && y < cam.resolution.y) {
         int index = x + (y * cam.resolution.x);
         PathSegment& segment = pathSegments[index];
+        thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
+        thrust::uniform_real_distribution<float> u01(0, 1);
+
+        // focal length
+        float focalLength = 3.f; 
+        float blur = 2.f; 
+
+        // calculate random ray within aperture
+        float apertureX = u01(rng) * blur;
+        float apertureY = u01(rng) * blur;
 
         segment.ray.origin = cam.position;
         segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
 
-        thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 0);
-        thrust::uniform_real_distribution<float> u01(0, 1);
-
-        // TODO: implement antialiasing by jittering the ray
-        float jitterX = u01(rng) - 0.5f;  // Random offset in X ([-0.5, 0.5])
-        float jitterY = u01(rng) - 0.5f;  // Random offset in Y ([-0.5, 0.5])
+        float jitterX = (u01(rng) - 0.5f) * cam.pixelLength.x * 100.f;  // Random offset in X ([-0.5, 0.5])
+        float jitterY = (u01(rng) - 0.5f) * cam.pixelLength.y * 100.f;  // Random offset in Y ([-0.5, 0.5])
 
         segment.ray.direction = glm::normalize(cam.view
             - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f + jitterX)
@@ -279,7 +260,6 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 }
 
 
-// TODO!!!
 __device__ float meshIntersectionTest(const Geom& geom, const Triangle* tris, const Ray& ray, glm::vec3& normal, glm::vec2& uvSample) {
   float t = -1.f;
   float t_min = FLT_MAX;
@@ -440,7 +420,6 @@ __global__ void shadeMaterial(
   else {
     Material material = materials[intersection.materialId];
     thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, pathSegment.remainingBounces);
-
     scatterRay(pathSegment, intersection, material, textures, rng); 
   }
 

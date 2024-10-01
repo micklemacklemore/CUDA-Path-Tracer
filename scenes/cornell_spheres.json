@@ -5,11 +5,7 @@
         {
             "TYPE":"Emitting",
             "RGB":[1.0, 1.0, 1.0],
-            "EMITTANCE":10.0
-        },
-        "default": {
-            "TYPE":"Diffuse",
-            "RGB":[0.98, 0.98, 0.98]
+            "EMITTANCE":5.0
         },
         "diffuse_white":
         {
@@ -47,20 +43,12 @@
     "Objects":
     [
         {
-            "TYPE":"mesh",
-            "PATH": "geometry\\Avocado.gltf",
-            "MATERIAL": "default",
-            "TRANS":[-2.1, 0.0, -2.0],
-            "ROTAT":[-30.0, 180.0, -20.0],
-            "SCALE":[100.0, 100.0, 100.0]
-        },
-        {
             "TYPE":"cube",
             "MATERIAL":"light",
             "TRANS":[0.0,10.0,0.0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[3.0,0.3,3.0]
-        }, 
+        },
         {
             "TYPE":"cube",
             "MATERIAL":"diffuse_white",
@@ -95,6 +83,69 @@
             "TRANS":[5.0,5.0,0.0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[0.01,10.0,10.0]
-        }
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[-3.2,2.0,-3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        }, 
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[0.0,2.0,-3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[3.2,2.0,-3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[-3.2,2.0, 0.0],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[0.0,2.0, 0.0],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[3.2,2.0, 0.0],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[-3.2,2.0,3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[0.0,2.0,3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        },
+        {
+            "TYPE":"sphere",
+            "MATERIAL":"diffuse_white",
+            "TRANS":[3.2,2.0,3.2],
+            "ROTAT":[0.0,0.0,0.0],
+            "SCALE":[1.5,1.5,1.5]
+        }        
     ]
 }
