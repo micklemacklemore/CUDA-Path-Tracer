@@ -21,7 +21,9 @@ float zoom, theta, phi;
 glm::vec3 cameraPosition;
 glm::vec3 ogLookAt; // for recentering the camera
 
-Scene* scene;
+std::unique_ptr<Scene> scene;
+std::unique_ptr<oidn::DeviceRef> device;
+
 GuiDataContainer* guiData;
 RenderState* renderState;
 int iteration;
@@ -46,7 +48,7 @@ int main(int argc, char** argv)
     const char* sceneFile = argv[1];
 
     // Load scene file
-    scene = new Scene(sceneFile);
+    scene = std::unique_ptr<Scene>(new Scene(sceneFile));
 
     //Create Instance for ImGUIData
     guiData = new GuiDataContainer();
@@ -81,6 +83,10 @@ int main(int argc, char** argv)
     InitImguiData(guiData);
     InitDataContainer(guiData);
 
+    // Initialize OIDN
+    device = make_unique<oidn::DeviceRef>(oidn::newDevice());
+    device->commit(); 
+
     // GLFW main loop
     mainLoop();
 
@@ -99,7 +105,7 @@ void saveImage()
         {
             int index = x + (y * width);
             glm::vec3 pix = renderState->image[index];
-            img.setPixel(width - 1 - x, y, glm::vec3(pix) / samples);
+            img.setPixel(width - 1 - x, y, glm::vec3(pix));
         }
     }
 
@@ -146,10 +152,10 @@ void runCuda()
     if (iteration == 0)
     {
         pathtraceFree();
-        pathtraceInit(scene);
+        pathtraceInit(scene.get());
     }
 
-    if (iteration < renderState->iterations)
+    if (iteration < renderState->iterations) // renderState->iterations
     {
         uchar4* pbo_dptr = NULL;
         iteration++;
@@ -167,7 +173,7 @@ void runCuda()
         saveImage();
         pathtraceFree();
         cudaDeviceReset();
-        exit(EXIT_SUCCESS);
+        std::exit(EXIT_SUCCESS); 
     }
 }
 

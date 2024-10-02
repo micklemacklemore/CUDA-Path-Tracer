@@ -6,8 +6,10 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <fstream>
+#include <memory>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
+#include <OpenImageDenoise/oidn.hpp>
 #include "glslUtility.hpp"
 #include <iostream>
 #include <sstream>
@@ -26,7 +28,9 @@ using namespace std;
 //----------PATH TRACER----------
 //-------------------------------
 
-extern Scene* scene;
+extern std::unique_ptr<Scene> scene;
+extern std::unique_ptr<oidn::DeviceRef> device; 
+
 extern int iteration;
 
 extern int width;

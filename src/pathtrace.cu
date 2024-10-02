@@ -1,25 +1,25 @@
 #include "pathtrace.h"
+#include "sceneStructs.h"
+#include "scene.h"
+#include "utilities.h"
+#include "intersections.h"
+#include "interactions.h" 
+#include "meshio.h"
 
-#include <cstdio>
-#include <cuda.h>
-#include <cmath>
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/remove.h>
 #include <thrust/device_ptr.h>
 #include <thrust/sort.h>
 #include <device_launch_parameters.h>
-
 #include <glm/gtc/matrix_transform.hpp>
-
-#include "sceneStructs.h"
-#include "scene.h"
 #include "glm/glm.hpp"
 #include "glm/gtx/norm.hpp"
-#include "utilities.h"
-#include "intersections.h"
-#include "interactions.h" 
-#include "meshio.h"
+#include <OpenImageDenoise/oidn.hpp>
+
+#include <cstdio>
+#include <cuda.h>
+#include <cmath>
 
 #define ERRORCHECK 1
 
@@ -35,62 +35,11 @@
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
-void checkCUDAErrorFn(const char* msg, const char* file, int line)
-{
-#if ERRORCHECK
-    cudaDeviceSynchronize();
-    cudaError_t err = cudaGetLastError();
-    if (cudaSuccess == err)
-    {
-        return;
-    }
-    fprintf(stderr, "CUDA error");
-    if (file)
-    {
-        fprintf(stderr, " (%s:%d)", file, line);
-    }
-    fprintf(stderr, ": %s: %s\n", msg, cudaGetErrorString(err));
-#ifdef _WIN32
-    getchar();
-#endif // _WIN32
-    exit(EXIT_FAILURE);
-#endif // ERRORCHECK
-}
-
-__host__ __device__
-thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth)
-{
-    int h = utilhash((1 << 31) | (depth << 22) | iter) ^ utilhash(index);
-    return thrust::default_random_engine(h);
-}
-
-//Kernel that writes the image to the OpenGL PBO directly.
-__global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution, int iter, glm::vec3* image)
-{
-    int x = (blockIdx.x * blockDim.x) + threadIdx.x;
-    int y = (blockIdx.y * blockDim.y) + threadIdx.y;
-
-    if (x < resolution.x && y < resolution.y)
-    {
-        int index = x + (y * resolution.x);
-        glm::vec3 pix = image[index];
-
-        glm::ivec3 color;
-        color.x = glm::clamp((int)(pix.x / iter * 255.0), 0, 255);
-        color.y = glm::clamp((int)(pix.y / iter * 255.0), 0, 255);
-        color.z = glm::clamp((int)(pix.z / iter * 255.0), 0, 255);
-
-        // Each thread writes one pixel location in the texture (textel)
-        pbo[index].w = 0;
-        pbo[index].x = color.x;
-        pbo[index].y = color.y;
-        pbo[index].z = color.z;
-    }
-}
 
 static Scene* hst_scene = nullptr;
 static GuiDataContainer* guiData = nullptr;
 static glm::vec3* dev_image = nullptr;
+static glm::vec3* dev_finalimage = nullptr; 
 static Geom* dev_geoms = nullptr;
 static Triangle* dev_tris = nullptr; 
 static Material* dev_materials = nullptr;
@@ -102,6 +51,61 @@ static std::vector<cudaArray_t> host_cuArray;
 static cudaTextureObject_t* dev_textures = nullptr; 
 static thrust::device_ptr<PathSegment> thrust_dev_paths = nullptr; 
 static thrust::device_ptr<ShadeableIntersection> thrust_dev_intersections = nullptr;
+
+extern std::unique_ptr<oidn::DeviceRef> device; 
+
+void checkCUDAErrorFn(const char* msg, const char* file, int line)
+{
+#if ERRORCHECK
+  cudaDeviceSynchronize();
+  cudaError_t err = cudaGetLastError();
+  if (cudaSuccess == err)
+  {
+    return;
+  }
+  fprintf(stderr, "CUDA error");
+  if (file)
+  {
+    fprintf(stderr, " (%s:%d)", file, line);
+  }
+  fprintf(stderr, ": %s: %s\n", msg, cudaGetErrorString(err));
+#ifdef _WIN32
+  getchar();
+#endif // _WIN32
+  exit(EXIT_FAILURE);
+#endif // ERRORCHECK
+}
+
+__host__ __device__
+thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth)
+{
+  int h = utilhash((1 << 31) | (depth << 22) | iter) ^ utilhash(index);
+  return thrust::default_random_engine(h);
+}
+
+//Kernel that writes the image to the OpenGL PBO directly.
+__global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution, int iter, glm::vec3* image)
+{
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+
+  if (x < resolution.x && y < resolution.y)
+  {
+    int index = x + (y * resolution.x);
+    glm::vec3 pix = image[index];
+
+    glm::ivec3 color;
+    color.x = glm::clamp((int)(pix.x * 255.0), 0, 255);
+    color.y = glm::clamp((int)(pix.y * 255.0), 0, 255);
+    color.z = glm::clamp((int)(pix.z * 255.0), 0, 255);
+
+    // Each thread writes one pixel location in the texture (textel)
+    pbo[index].w = 0;
+    pbo[index].x = color.x;
+    pbo[index].y = color.y;
+    pbo[index].z = color.z;
+  }
+}
 
 void InitDataContainer(GuiDataContainer* imGuiData)
 {
@@ -157,6 +161,10 @@ void pathtraceInit(Scene* scene)
 
     cudaMalloc(&dev_image, pixelcount * sizeof(glm::vec3));
     cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
+
+    cudaMalloc(&dev_finalimage, pixelcount * sizeof(glm::vec3));
+    cudaMemset(dev_finalimage, 0, pixelcount * sizeof(glm::vec3));
+
     cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
 
     for (const auto& tex : scene->textures) {
@@ -193,6 +201,7 @@ void pathtraceInit(Scene* scene)
 void pathtraceFree()
 {
     cudaFree(dev_image);  // no-op if dev_image is null
+    cudaFree(dev_finalimage); 
     cudaFree(dev_paths);
     cudaFree(dev_geoms);
     cudaFree(dev_materials);
@@ -243,8 +252,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         );
 
         // Depth of field
-        float focalLength = 6.f;
-        float blur = 0.7f;
+        float focalLength = 7.f;
+        float blur = 0.4f;
         float apertureX = (u01(rng) - 0.5f) * blur;
         float apertureY = (u01(rng) - 0.5f) * blur;
         glm::vec3 convergence = cam.position + (focalLength * direction);
@@ -429,7 +438,7 @@ __global__ void shadeMaterial(
 
 
 // Add the current iteration's output to the overall image
-__global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iterationPaths)
+__global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iterationPaths, int iter)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
@@ -438,6 +447,19 @@ __global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iteration
         PathSegment iterationPath = iterationPaths[index];
         image[iterationPath.pixelIndex] += iterationPath.color;
     }
+}
+
+// devide the samples by iterations
+__global__ void normalizeSamples(glm::ivec2 resolution, glm::vec3* out_image, glm::vec3* in_image, int iter)
+{
+  int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+
+  if (x < resolution.x && y < resolution.y)
+  {
+    int index = x + (y * resolution.x);
+    out_image[index] = in_image[index] / (float)iter; 
+  }
 }
 
 struct isTerminated
@@ -570,15 +592,52 @@ void pathtrace(uchar4* pbo, int frame, int iter)
 
     // Assemble this iteration and apply it to the image
     dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
-    finalGather<<<numBlocksPixels, blockSize1d>>>(num_paths, dev_image, dev_paths);
+    finalGather<<<numBlocksPixels, blockSize1d>>>(num_paths, dev_image, dev_paths, iter);
 
     ///////////////////////////////////////////////////////////////////////////
 
+    /* Denoise */
+
+    if (iter == 1 || iter % 10 == 0) {
+      const int pixelcount = cam.resolution.x * cam.resolution.y;
+      static oidn::BufferRef colorBuf = device->newBuffer(pixelcount * sizeof(glm::vec3));  // Buffer for input color
+
+      normalizeSamples<<<blocksPerGrid2d, blockSize2d>>> (cam.resolution, dev_finalimage, dev_image, iter);
+
+      // Copy the image from GPU to OIDN buffer (host)
+      cudaMemcpy(colorBuf.getData(), dev_finalimage, pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+      checkCUDAError("cudaMemcpy from dev_image to colorBuf");
+
+      // Prepare the denoiser
+      static oidn::FilterRef filter = device->newFilter("RT");  // "RT" filter is for ray tracing
+      filter.setImage("color", colorBuf.getData(), oidn::Format::Float3, cam.resolution.x, cam.resolution.y);
+      filter.setImage("output", colorBuf.getData(), oidn::Format::Float3, cam.resolution.x, cam.resolution.y);
+
+      // If you had auxiliary buffers for albedo or normal, you would set them here, like so:
+      // filter.setImage("albedo", albedoBuf.getData(), oidn::Format::Float3, cam.resolution.x, cam.resolution.y);
+      // filter.setImage("normal", normalBuf.getData(), oidn::Format::Float3, cam.resolution.x, cam.resolution.y);
+
+      filter.commit();
+
+      // Execute the denoiser
+      filter.execute();
+
+      // Check for errors
+      const char* errorMessage;
+      if (device->getError(errorMessage) != oidn::Error::None) {
+        std::cerr << "Error during denoising: " << errorMessage << std::endl;
+      }
+
+      // Copy the denoised image back to the GPU
+      cudaMemcpy(dev_finalimage, colorBuf.getData(), pixelcount * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+      checkCUDAError("cudaMemcpy from denoisedBuf to dev_finalimage");
+    }
+
     // Send results to OpenGL buffer for rendering
-    sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_image);
+    sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_finalimage);
 
     // Retrieve image from GPU
-    cudaMemcpy(hst_scene->state.image.data(), dev_image,
+    cudaMemcpy(hst_scene->state.image.data(), dev_finalimage,
         pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 
     checkCUDAError("pathtrace");

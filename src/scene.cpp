@@ -36,8 +36,18 @@ void Scene::loadFromJSON(const std::string& jsonName)
     std::ifstream f(jsonName);
     json data = json::parse(f);
 
-    // Get scene directory
-    std::string jsonDirPath = jsonName.substr(0, jsonName.rfind("\\") + 1); // token is "scott"
+    std::string jsonDirPath; 
+
+    if (jsonName.rfind("\\") != string::npos) {
+      jsonDirPath = jsonName.substr(0, jsonName.rfind("\\") + 1);
+    } 
+    else if (jsonName.rfind("/") != string::npos) {
+      jsonDirPath = jsonName.substr(0, jsonName.rfind("/") + 1);
+    }
+    else {
+      std::cerr << "loadFromJSON: failed to parse string." << std::endl;
+      std::exit(-1); 
+    }
 
     // Parse Materials
 

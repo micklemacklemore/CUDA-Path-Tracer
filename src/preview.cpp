@@ -15,6 +15,8 @@ GuiDataContainer* imguiData = NULL;
 ImGuiIO* io = nullptr;
 bool mouseOverImGuiWinow = false;
 
+
+
 std::string currentTimeString()
 {
     time_t now;
@@ -195,6 +197,9 @@ bool init()
 
     glUseProgram(passthroughProgram);
     glActiveTexture(GL_TEXTURE0);
+
+    // Initialize the OIDN device once
+    
 
     return true;
 }

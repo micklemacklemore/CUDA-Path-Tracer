@@ -18,7 +18,7 @@ private:
     void loadFromJSON(const std::string& jsonName);
 public:
     Scene(string filename);
-    ~Scene();
+    ~Scene() {}; 
 
     std::vector<Geom> geoms;
     std::vector<Triangle> tris; 
