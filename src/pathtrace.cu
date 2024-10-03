@@ -30,6 +30,9 @@
 //#define DEBUG_SKY_LIGHT_BLACK_BG 1
 //#define DEBUG_NORMALS 0
 
+#define DEPTH_OF_FIELD 0
+#define OIDN 0
+
 #define DEBUG_ONE_BOUNCE 0
 #define FORCE_NUM_BOUNCES 1
 
@@ -95,9 +98,15 @@ __global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution, int iter, glm
     glm::vec3 pix = image[index];
 
     glm::ivec3 color;
+#if OIDN
     color.x = glm::clamp((int)(pix.x * 255.0), 0, 255);
     color.y = glm::clamp((int)(pix.y * 255.0), 0, 255);
     color.z = glm::clamp((int)(pix.z * 255.0), 0, 255);
+#else
+    color.x = glm::clamp((int)(pix.x / iter * 255.0), 0, 255);
+    color.y = glm::clamp((int)(pix.y / iter * 255.0), 0, 255);
+    color.z = glm::clamp((int)(pix.z / iter * 255.0), 0, 255);
+#endif
 
     // Each thread writes one pixel location in the texture (textel)
     pbo[index].w = 0;
@@ -115,7 +124,6 @@ void InitDataContainer(GuiDataContainer* imGuiData)
 // load imageData into cuda device and get back device pointers to the image
 void loadTexturesToCUDADevice(cudaArray_t& cuArray, cudaTextureObject_t& texObj, const meshio::ImageData& imageData) {
   // Allocate CUDA array in device memory
-
   // channel format desc specifies the number of bits 
   // in each texture channel (rgba) and the component
   // format (in this case floats)
@@ -128,9 +136,16 @@ void loadTexturesToCUDADevice(cudaArray_t& cuArray, cudaTextureObject_t& texObj,
   // Set pitch of the source (the width in memory in bytes of the 2D array pointed
   // to by src, including padding), we dont have any padding
   const size_t spitch = imageData.width * 4 * sizeof(float);
-  cudaMemcpy2DToArray(cuArray, 0, 0, imageData.buffer.data(),
-    spitch, imageData.width * 4 * sizeof(float),
-    imageData.height, cudaMemcpyHostToDevice);
+  cudaMemcpy2DToArray(
+    cuArray, 
+    0, 
+    0, 
+    imageData.buffer.data(),
+    spitch, 
+    imageData.width * 4 * sizeof(float),
+    imageData.height, 
+    cudaMemcpyHostToDevice
+  );
   checkCUDAError("cudaMemcpy2DToArray");
 
   // Specify texture "resource"
@@ -252,6 +267,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
         );
 
         // Depth of field
+#if DEPTH_OF_FIELD
         float focalLength = 7.f;
         float blur = 0.4f;
         float apertureX = (u01(rng) - 0.5f) * blur;
@@ -260,6 +276,11 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
         segment.ray.origin = cam.position + glm::vec3(apertureX, apertureY, 0.f); 
         segment.ray.direction = glm::normalize(convergence - segment.ray.origin); 
+#else
+        segment.ray.origin = cam.position; 
+        segment.ray.direction = direction; 
+#endif
+
         segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
@@ -597,7 +618,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     ///////////////////////////////////////////////////////////////////////////
 
     /* Denoise */
-
+#if OIDN
     if (iter == 1 || iter % 10 == 0) {
       const int pixelcount = cam.resolution.x * cam.resolution.y;
       static oidn::BufferRef colorBuf = device->newBuffer(pixelcount * sizeof(glm::vec3));  // Buffer for input color
@@ -634,11 +655,12 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     }
 
     // Send results to OpenGL buffer for rendering
-    sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_finalimage);
-
-    // Retrieve image from GPU
-    cudaMemcpy(hst_scene->state.image.data(), dev_finalimage,
-        pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
-
+    sendImageToPBO << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_finalimage);
+    // Retrieve image from GPU (for output)
+    cudaMemcpy(hst_scene->state.image.data(), dev_finalimage, pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+#else
+    sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_image);
+    cudaMemcpy(hst_scene->state.image.data(), dev_image, pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+#endif
     checkCUDAError("pathtrace");
 }
