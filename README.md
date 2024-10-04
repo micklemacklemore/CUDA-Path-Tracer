@@ -95,3 +95,7 @@ For optimizations that target specific kernels, we recommend using stacked bar g
 
 Timings from NSight should be very useful for generating these kinds of charts.
 ```
+
+## References
+
+
