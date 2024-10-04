@@ -54,7 +54,7 @@ For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
 
 ### Materials (BxDF's)
 
-This renderer supports basic Bidirectional Scattering Distribution Function (BSDF) materials. At a high-level, BSDF's describe how light is scattered from certain materials. Using terminology from [Physically Based Rendering 3rd Edition](https://pbr-book.org/3ed-2018/Reflection_Models) (commonly known as PBRTv3), BSDF's can generally be a combination of BRDF's (Reflectance Models, i.e. Diffuse and Specular) and BTDF's (Transmission Models, how light passes through translucent materials). The "Glass" Material below is an example of a BSDF (Specular Reflection BSDF + Transmission BTDF), and is based off of `FresnelSpecular` which is described by the aformentioned PBRTv3. 
+This renderer supports basic Bidirectional Scattering Distribution Function (BSDF) materials. At a high-level, BSDF's describe how light is scattered from certain materials. Using terminology from [Physically Based Rendering: From Theory to Implementation](https://pbr-book.org/3ed-2018/Reflection_Models) (commonly known as PBRT), BSDF's can generally be a combination of BRDF's (Reflectance Models, i.e. Diffuse and Specular) and BTDF's (Transmission Models, how light passes through translucent materials). The "Glass" Material below is an example of a BSDF (Specular Reflection BSDF + Transmission BTDF), and is based off of `FresnelSpecular` which is described by PBRT. 
 
 #### Perfect Diffuse BRDF & Perfect Specular BRDF
 
@@ -62,9 +62,10 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 
 ### Depth of Field
 
-For each extra feature, you must provide the following analysis:
+I found [this blog article](https://pathtracing.home.blog/depth-of-field/) which was used for reference and implementation. Producing depth of field (in layman's terms, ['bokeh' in a photograph](https://www.dropicts.com/how-to-achieve-stunning-bokeh-effect-in-your-photo/)) is done by picking a focal point along a generated ray, and jittering it's origin in the xy directions within an aperture. The focal point is the point along the ray where things will be in focus. Increasing the size of your aperture increases the "blur" effect. 
 
 ```md
+For each extra feature, you must provide the following analysis:
 From the examples I have seen, this isn't followed verbatim...
 
 * Overview write-up of the feature along with before/after images.
