@@ -77,18 +77,53 @@ From the examples I have seen, this isn't followed verbatim...
 
 ## Performance Analysis
 
-### Stream Compaction
+### Hypothesis
+
+ In this performance analysis we'll be testing two significant GPGPU optimizations made to the path tracer to boost performance: *Stream Compaction* and *Material Sorting*. It's beneficial to explain some of the code base to understand what these optimizations will do for us. 
+
+In the code, the `PathSegment` class represents the path a ray takes at every bounce. Before the first bounce, there are `n == pixel count` number of path segments. 
+
+The `PathSegment` has member attributes that determine whether or not it will continue after each bounce. `bool PathSegment::isFinished` is `true` when the path hit a light source and is ready to contribute to the final image. `bool PathSegment::isTerminated` is `true` when the path has either hit nothing or it never hit a light source. As opposed to *finished* paths, paths that are *terminated* are totally removed via ***Stream Compaction*** and no longer spawn kernels.
+
+Each `PathSegment` has an associated `ShadeableIntersection` which is created at each bounce (by the `computeIntersections` kernel) that contains information about the material at each hit-point of the ray path. Due to the one-to-one relationship between these two objects, they share the same index and thus both can (and must) be sorted in the same way. One can sort these objects by the material type for example. This would be beneficial as it would mean that kernels in the same warp would more likely execute similar code paths and access similar areas of memory. This would mean *coherent memory access* and *reduced thread divergence*, and is what is attempted via ***Material Sorting***. 
+
+#### Stream Compaction
+
+**Stream Compaction** involves terminating those ray paths at each bounce depth that will not contribute to the eventual final image. Specifically, these are paths that: 
+
+* Ended up intersecting infinity (a.k.a. they did not intersect any object)
+* Ended up not hitting a light source.
+
+The first scenario will never occur in closed scenes, as eventually a ray will always hit geometry. And thus I suspect that stream compaction won't be as effective in closed scenes. We could further decrease it's effectiveness by adding an infinite light such as a "sky light" / "environment light".
+
+#### Material Sorting
+
+**Material Sorting** simply sorts both `PathSegments` and `ShadeableIntersections` by their material type. `ShadeableIntersections` store the material information and so it is used as a key in `thrust::sort
+
+### Method
+
+The test scenes are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed).
+
+Light Open Scene (Open Cornell Box)
+Heavy Open Scene (Open Cornell Box with lots of meshes)
+
+Light Closed Scene (Closed Cornell Box)
+Heavy Closed Scene (Closed Cornell Box with lots of meshes)
+
+### Results
+
 ```md
+TODO
+====
+
 Stream compaction helps most after a few bounces. Print and plot the effects of stream compaction within a single iteration (i.e. the number of unterminated rays after each bounce) and evaluate the benefits you get from stream compaction.
-```
-### Open & Closed Scenes 
 
-### Effects of stream compaction
-```
+~~~
+
 Compare scenes which are open (like the given cornell box) and closed (i.e. no light can escape the scene). Again, compare the performance effects of stream compaction! Remember, stream compaction only affects rays which terminate, so what might you expect?
-```
 
-```md
+~~~
+
 For optimizations that target specific kernels, we recommend using stacked bar graphs to convey total execution time and improvements in individual kernels. For example:
 
   ![Clearly the Macchiato is optimal.](img/stacked_bar_graph.png)
