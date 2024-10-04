@@ -17,26 +17,50 @@ Supported Features:
 * Normal Maps
 * Depth of field
 * Open Image Denoiser intergration
-* Physically-Based Materials (BSDFs)
+* Physically-Based Materials (BxDFs)
   * Matte (Perfect Diffuse)
   * Mirror (Perfect Specular)
   * Glass (Specular Reflection + Transmission + Fresnel)
 
 ## Feature Descriptions
 
-### Scene Loading 
+### Scene Description and Loading 
+
+Scenes in this renderer are described with a basic JSON schema that can specify cameras, materials and object primitives, including Spheres, Cubes and Triangle Meshes (using glTF). For more information about the JSON format, check `INSTRUCTIONS.md` and the scene examples in the scenes folder. 
 
 #### glTF meshes
 
+One node / one mesh glTF files can be loaded, so long as they contain the appropriate vertex attributes: positions, normals and texture coordinates (if textures are also included). 
+
+The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) was referenced for this feature and was of great help! 
+
 #### Albedo and Normal Maps
 
-### Open Image Denoiser
+With the glTF format, albedo and normal map textures are renderable and supported. 
 
-### Materials
+Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU `here`, which can later be accessed by CUDA kernels `here` (Similar to an OpenGL Sampler2D). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
 
-#### Perfect Diffuse & Perfect Specular
+### Intel Open Image Denoise
 
-#### Glass (Specular Fresnel)
+Intel Open Image Denoise is a high-performance open-source library for image noise filtering for ray-tracers. This library is integrated into the renderer and filters out the Monte Carlo sample noise that allows us to render smooth images faster. 
+
+An image that would typically take 10,000 samples to render can be done in merely half the time, with potentially cleaner results. 
+
+To denoise rendered images, the API is fairly straightforward. The denoiser accepts 32-bit floating point channels by default and you can see how it's used `here`. 
+
+[Image Here]
+
+For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
+
+### Materials (BxDF's)
+
+This renderer supports basic Bidirectional Scattering Distribution Function (BSDF) materials. At a high-level, BSDF's describe how light is scattered from certain materials. Using terminology from [Physically Based Rendering 3rd Edition](https://pbr-book.org/3ed-2018/Reflection_Models) (commonly known as PBRTv3), BSDF's can generally be a combination of BRDF's (Reflectance Models, i.e. Diffuse and Specular) and BTDF's (Transmission Models, how light passes through translucent materials). The "Glass" Material below is an example of a BSDF (Specular Reflection BSDF + Transmission BTDF), and is based off of `FresnelSpecular` which is described by the aformentioned PBRTv3. 
+
+#### Perfect Diffuse BRDF & Perfect Specular BRDF
+
+#### Glass (Specular Fresnel BSDF)
+
+### Depth of Field
 
 For each extra feature, you must provide the following analysis:
 
