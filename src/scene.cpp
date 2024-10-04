@@ -73,7 +73,13 @@ void Scene::loadFromJSON(const std::string& jsonName)
         {
             const auto& col = p["RGB"];
             newMaterial.color = glm::vec3(col[0], col[1], col[2]);
-            newMaterial.hasReflective = 1.f - p["ROUGHNESS"]; 
+            newMaterial.hasReflective = 1.f - p["ROUGHNESS"];   // this is probably wrong
+        }
+        else if (p["TYPE"] == "Transmission")
+        {
+          const auto& col = p["RGB"];
+          newMaterial.color = glm::vec3(col[0], col[1], col[2]);
+          newMaterial.hasTransmissive = 1.f; 
         }
         MatNameToID[name] = materials.size();
 

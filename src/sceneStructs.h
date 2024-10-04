@@ -47,11 +47,11 @@ struct Triangle {
 
 struct Material
 {
-    struct
-    {
-        float exponent;
-        glm::vec3 color;
-    } specular;
+    //struct
+    //{
+    //    float exponent;
+    //    glm::vec3 color;
+    //} specular;
 
     struct
     {
@@ -60,8 +60,8 @@ struct Material
     } textureIdx;
 
     glm::vec3 color;
-    float hasReflective;  // metalness (diffuse = (1. - hasReflective) )
-    float hasRefractive;  // transmission ? 
+    float hasReflective;  
+    float hasTransmissive; 
     float indexOfRefraction;
     float emittance;
 };
@@ -109,6 +109,7 @@ struct ShadeableIntersection
   glm::vec2 texSample; 
 
   int materialId;
+  bool outside; 
 
   __host__ __device__ bool operator<(const ShadeableIntersection& other) const
   {
