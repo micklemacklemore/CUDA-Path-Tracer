@@ -24,6 +24,7 @@
 #define ERRORCHECK 1
 
 #define SORT_BY_MATERIAL 0
+#define STREAM_COMPACTION 0 // TODO
 
 //#define MESH_TEST 0
 //#define DEBUG_SKY_LIGHT 0

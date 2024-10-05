@@ -81,6 +81,13 @@ void Scene::loadFromJSON(const std::string& jsonName)
           newMaterial.color = glm::vec3(col[0], col[1], col[2]);
           newMaterial.hasTransmissive = 1.f; 
         }
+        else if (p["TYPE"] == "MicrofacetReflection") {
+          const auto& col = p["RGB"];
+          const auto& rough = p["ROUGHNESS"]; 
+          newMaterial.color = glm::vec3(col[0], col[1], col[2]);
+          newMaterial.isMicrofacet = 1.f; 
+          newMaterial.roughness = rough; 
+        }
         MatNameToID[name] = materials.size();
 
         newMaterial.textureIdx.albedo = -1; 

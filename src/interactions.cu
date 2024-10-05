@@ -38,6 +38,144 @@ __device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
   return disc;
 }
 
+/*
+* Trowbridge-Reitz distribution functions 
+* Copyright(c) 1998-2016 Matt Pharr, Greg Humphreys, and Wenzel Jakob.
+* 
+* - Only sampling visible area.
+* - Assuming an isotropic material (alpha.x == alpha.y)
+*/
+
+__device__ float SinTheta(const glm::vec3& w) {
+  return sqrtf(fmaxf(0.f, 1.f - (w.z * w.z))); 
+}
+
+__device__ float Tan2Theta(const glm::vec3& w) {
+  // cos2theta w.z * w.z
+  return fmaxf(0.f, 1.f - (w.z * w.z)) / (w.z * w.z); 
+}
+
+__device__ float CosPhi(const glm::vec3& w) {
+  float sinTheta = SinTheta(w);
+  return (sinTheta == 0.f) ? 1.f : glm::clamp(w.x / sinTheta, -1.f, 1.f);
+}
+
+__device__ float SinPhi(const glm::vec3& w) {
+  float sinTheta = SinTheta(w);
+  return (sinTheta == 0.f) ? 0.f : glm::clamp(w.y / sinTheta, -1.f, 1.f);
+}
+
+__device__ float TrowbridgeReitz_Lambda(const glm::vec3& w, float alpha) {
+  float absTanTheta = abs(SinTheta(w) / w.z);
+  if (isinf(absTanTheta)) return 0.f;
+  // Compute _alpha_ for direction _w_
+  float alphaa = sqrtf((CosPhi(w) * CosPhi(w)) * alpha * alpha + (SinPhi(w) * SinPhi(w)) * alpha * alpha);
+  float alpha2Tan2Theta = (alphaa * absTanTheta) * (alphaa * absTanTheta);
+  return (-1.f + sqrtf(1.f + alpha2Tan2Theta)) / 2.f;
+}
+
+__device__ float TrowbridgeReitz_D(glm::vec3 wh, float alpha) {
+  float tan2Theta = Tan2Theta(wh);
+  if (isinf(tan2Theta)) return 0.f;
+  const float cos4Theta = wh.z * wh.z * wh.z * wh.z;
+  float e =
+    ( ( CosPhi(wh) * CosPhi(wh) ) / (alpha * alpha) + ( SinPhi(wh) * SinPhi(wh) ) / (alpha * alpha)) * tan2Theta;
+  return 1.f / (PI * alpha * alpha * cos4Theta * (1 + e) * (1 + e));
+}
+
+__device__ float TrowbridgeReitz_G(glm::vec3 wo, glm::vec3 wi, float alpha) {
+  return 1.f / (1.f + TrowbridgeReitz_Lambda(wo, alpha) + TrowbridgeReitz_Lambda(wi, alpha));
+}
+
+__device__ float TrowbridgeReitz_RoughnessToAlpha(float roughness) {
+  roughness = fmaxf(roughness, (float)1e-3);
+  float x = log(roughness);
+  return 1.62142f + 0.819955f * x + 0.1734f * x * x + 0.0171201f * x * x * x +
+    0.000640711f * x * x * x * x;
+}
+
+__device__ void TrowbridgeReitzSample11(float cosTheta, float U1, float U2, float* slope_x, float* slope_y) {
+  // special case (normal incidence)
+  if (cosTheta > .9999) {
+    float r = sqrtf(U1 / (1 - U1));
+    float phi = 6.28318530718 * U2;
+    *slope_x = r * cosf(phi);
+    *slope_y = r * sinf(phi);
+    return;
+  }
+
+  float sinTheta = sqrtf(fmaxf(0.f, 1.f - cosTheta * cosTheta));
+  float tanTheta = sinTheta / cosTheta;
+  float a = 1 / tanTheta;
+  float G1 = 2 / (1 + sqrtf(1.f + 1.f / (a * a)));
+
+  // sample slope_x
+  float A = 2.f * U1 / G1 - 1.f;
+  float tmp = 1.f / (A * A - 1.f);
+  if (tmp > 1e10) tmp = 1e10;
+  float B = tanTheta;
+  float D = sqrtf(
+    fmaxf(float(B * B * tmp * tmp - (A * A - B * B) * tmp), 0.f));
+  float slope_x_1 = B * tmp - D;
+  float slope_x_2 = B * tmp + D;
+  *slope_x = (A < 0 || slope_x_2 > 1.f / tanTheta) ? slope_x_1 : slope_x_2;
+
+  // sample slope_y
+  float S;
+  if (U2 > 0.5f) {
+    S = 1.f;
+    U2 = 2.f * (U2 - .5f);
+  }
+  else {
+    S = -1.f;
+    U2 = 2.f * (.5f - U2);
+  }
+  float z =
+    (U2 * (U2 * (U2 * 0.27385f - 0.73369f) + 0.46341f)) /
+    (U2 * (U2 * (U2 * 0.093073f + 0.309420f) - 1.000000f) + 0.597999f);
+  *slope_y = S * z * sqrtf(1.f + *slope_x * *slope_x);
+
+  assert(!isinf(*slope_y));
+  assert(!isnan(*slope_y));
+}
+
+__device__ glm::vec3 TrowbridgeReitzSample(const glm::vec3& wi, float alpha, float U1, float U2) {
+  // 1. stretch wi
+  glm::vec3 wiStretched = glm::normalize(glm::vec3(alpha * wi.x, alpha * wi.y, wi.z));
+
+  // 2. simulate P22_{wi}(x_slope, y_slope, 1, 1)
+  float slope_x, slope_y;
+  TrowbridgeReitzSample11(wiStretched.z, U1, U2, &slope_x, &slope_y);
+
+  // 3. rotate
+  float tmp = CosPhi(wiStretched) * slope_x - SinPhi(wiStretched) * slope_y;
+  slope_y = SinPhi(wiStretched) * slope_x + CosPhi(wiStretched) * slope_y;
+  slope_x = tmp;
+
+  // 4. unstretch
+  slope_x = alpha * slope_x;
+  slope_y = alpha * slope_y;
+
+  // 5. compute normal
+  return glm::normalize(glm::vec3(-slope_x, -slope_y, 1.));
+}
+
+__device__ glm::vec3 TrowbridgeReitz_Sample_wh(const glm::vec3& wo, const glm::vec2& xi, float alpha) {
+  bool flip = wo.z < 0.f;
+  glm::vec3 wh = TrowbridgeReitzSample(flip ? -wo : wo, alpha, xi.x, xi.y);
+  if (flip) wh = -wh;
+
+  return wh; 
+}
+
+__device__ float TrowbridgeReitz_pdf(const glm::vec3& wo, const glm::vec3& wh, float alpha) {
+  return TrowbridgeReitz_D(wh, alpha) * abs(wh.z);
+}
+
+/*
+*****************************************************************
+*/
+
 __device__ glm::vec3 localToWorld(const glm::vec3& normal, const glm::vec3& vec) {
   glm::vec3 tangent, bitangent;
 
@@ -103,6 +241,10 @@ __device__ bool Refract(const glm::vec3& wi, const glm::vec3& n, float eta, glm:
   float cosThetaT = sqrtf(1 - sin2ThetaT);
   wt = eta * -wi + (eta * cosThetaI - cosThetaT) * glm::vec3(n);
   return true;
+}
+
+__device__ glm::vec3 faceForward(const glm::vec3& v, const glm::vec3& v2) {
+  return (glm::dot(v, v2) < 0.f) ? -v : v;
 }
 
 __device__ void scatterRay(
@@ -197,10 +339,87 @@ __device__ void scatterRay(
 
     // new ray for the next bounce
     pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction);
-    pathSegment.ray.origin += 1.f * wi;   // slightly offset the ray origin in the direction of the ray direction
+    pathSegment.ray.origin += 0.01f * wi;   // slightly offset the ray origin in the direction of the ray direction
     pathSegment.ray.direction = wi;
 
     --pathSegment.remainingBounces; 
+  }
+  else if (m.isMicrofacet > 0.f) {                                  // MICROFACET REFLECTION (PLASTIC)
+    glm::vec3 wo = worldToLocal(normal, -pathSegment.ray.direction);
+    glm::vec3 wi;
+    glm::vec3 bsdfValue;
+
+    float alpha = TrowbridgeReitz_RoughnessToAlpha(m.roughness); 
+
+    // --------- get the wh, wi and pdf - sample_f() -------------
+
+    if (wo.z == 0.f) {
+      pathSegment.isTerminated = true; 
+      return;
+    }
+
+    // sample the microfacet distribution to get the half vector
+    glm::vec3 wh = TrowbridgeReitz_Sample_wh(wo, xi, alpha);
+
+    if (glm::dot(wo, wh) < 0.f) {
+      pathSegment.isTerminated = true; 
+      return; 
+    }
+
+    wi = glm::reflect(-wo, wh);
+
+    // if not in same hemisphere
+    if (!(wo.z * wi.z > 0)) {
+      pathSegment.isTerminated = true; 
+      return; 
+    }
+
+    // compute PDF of wi for microfacet reflection
+    pdf = TrowbridgeReitz_pdf(wo, wh, alpha) / (4.f * glm::dot(wo, wh)); 
+
+    if (pdf < EPSILON || isnan(pdf)) {
+      pathSegment.isTerminated = true;
+      return;
+    }
+
+    // --------- calculate bsdf value - f() --------------
+
+    float cosThetaO = abs(wo.z); 
+    float cosThetaI = abs(wi.z);
+
+    // wh = wi + wo;  // TODO do we need to recalculate wh?  
+
+    if (cosThetaI < EPSILON || cosThetaO < EPSILON) {
+      pathSegment.isTerminated = true; 
+      return; 
+    }
+
+    if (wh.x < EPSILON && wh.y < EPSILON && wh.z < EPSILON) {
+      pathSegment.isTerminated = true;
+      return;
+    }
+
+    wh = glm::normalize(wh);
+
+    glm::vec3 F(fresnelDielectric(glm::dot(wi, faceForward(wh, glm::vec3(0.f, 0.f, 1.f))), 1.5f, 1.0f)); 
+
+    bsdfValue = (m.color * TrowbridgeReitz_D(wh, alpha) * TrowbridgeReitz_G(wo, wi, alpha) * F) / (4.f * cosThetaI * cosThetaO); 
+
+    // ---------- finally, do monte carlo and create new ray ---------------
+
+    // convert vec3 into the world coordinate system (using surface normal)
+    wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
+
+    // update throughput
+    pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, normal)) / pdf;
+    pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
+
+    // new ray for the next bounce
+    pathSegment.ray.origin = pathSegment.ray.origin + (intersection.t * pathSegment.ray.direction);
+    pathSegment.ray.origin += EPSILON * wi;   // slightly offset the ray origin in the direction of the ray direction
+    pathSegment.ray.direction = wi;
+
+    --pathSegment.remainingBounces;
   }
   else {                                                // PERFECT DIFFUSE REFLECTION
     // generate random direction in hemisphere

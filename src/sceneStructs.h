@@ -60,8 +60,10 @@ struct Material
     } textureIdx;
 
     glm::vec3 color;
-    float hasReflective;  
-    float hasTransmissive; 
+    float hasReflective;      // Is it perfect mirror  
+    float hasTransmissive;    // is it glass
+    float isMicrofacet;       // is it plastic
+    float roughness; 
     float indexOfRefraction;
     float emittance;
 };
