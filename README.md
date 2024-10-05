@@ -79,13 +79,42 @@ From the examples I have seen, this isn't followed verbatim...
 
 ### Hypothesis
 
- In this performance analysis we'll be testing two significant GPGPU optimizations made to the path tracer to boost performance: *Stream Compaction* and *Material Sorting*. It's beneficial to explain some of the code base to understand what these optimizations will do for us. 
+In this performance analysis we'll be testing two significant GPGPU optimizations made to the path tracer to boost performance: *Stream Compaction* and *Material Sorting*. It's beneficial to explain some of the code base to understand what these optimizations will do for us. 
+
+```c++
+// sceneStructs.h
+
+struct PathSegment {
+ Ray ray;         // origin + direction
+ glm::vec3 color; // accumulated color
+ int remainingBounces;
+ bool isFinished;
+ bool isTerminated;
+}
+```
 
 In the code, the `PathSegment` class represents the path a ray takes at every bounce. Before the first bounce, there are `n == pixel count` number of path segments. 
 
 The `PathSegment` has member attributes that determine whether or not it will continue after each bounce. `bool PathSegment::isFinished` is `true` when the path hit a light source and is ready to contribute to the final image. `bool PathSegment::isTerminated` is `true` when the path has either hit nothing or it never hit a light source. As opposed to *finished* paths, paths that are *terminated* are totally removed via ***Stream Compaction*** and no longer spawn kernels.
 
-Each `PathSegment` has an associated `ShadeableIntersection` which is created at each bounce (by the `computeIntersections` kernel) that contains information about the material at each hit-point of the ray path. Due to the one-to-one relationship between these two objects, they share the same index and thus both can (and must) be sorted in the same way. One can sort these objects by the material type for example. This would be beneficial as it would mean that kernels in the same warp would more likely execute similar code paths and access similar areas of memory. This would mean *coherent memory access* and *reduced thread divergence*, and is what is attempted via ***Material Sorting***. 
+```c++
+// sceneStructs.h
+
+struct ShadeableIntersection {
+ int materialID;  // index to material data
+ // ...
+}
+```
+
+Each `PathSegment` has an associated `ShadeableIntersection` which is created at each bounce (by the `computeIntersections` kernel) that contains information about the material at each hit-point of the ray path. 
+
+Due to the one-to-one relationship between these two objects, they share the same index and thus both can (and must) be sorted in the same way. One can sort these objects by the material type for example.
+
+Sorting by material would be beneficial as it would mean that kernels in the same warp would more likely execute similar code paths and access similar areas of memory when calculating light accumulation. 
+
+This would mean *coherent memory access* and *reduced thread divergence*, and is what is attempted via ***Material Sorting***. 
+
+These optimizations are explained in the next sections.
 
 #### Stream Compaction
 
@@ -98,7 +127,7 @@ The first scenario will never occur in closed scenes, as eventually a ray will a
 
 #### Material Sorting
 
-**Material Sorting** simply sorts both `PathSegments` and `ShadeableIntersections` by their material type. `ShadeableIntersections` store the material information and so it is used as a key in `thrust::sort
+**Material Sorting** simply sorts both `PathSegments` and `ShadeableIntersections` by their material type. `ShadeableIntersections` store the material information and so it is used as a key in `thrust::sort_by_key`. If there is a considerable number of materials and a high number of non-terminated paths, this could have a considerable performance boost. 
 
 ### Method
 
