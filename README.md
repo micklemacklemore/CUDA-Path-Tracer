@@ -64,17 +64,6 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 
 I found [this blog article](https://pathtracing.home.blog/depth-of-field/) which was used for reference and implementation. Producing depth of field (in layman's terms, ['bokeh' in a photograph](https://www.dropicts.com/how-to-achieve-stunning-bokeh-effect-in-your-photo/)) is done by picking a focal point along a generated ray, and jittering it's origin in the xy directions within an aperture. The focal point is the point along the ray where things will be in focus. Increasing the size of your aperture increases the "blur" effect. 
 
-```md
-For each extra feature, you must provide the following analysis:
-From the examples I have seen, this isn't followed verbatim...
-
-* Overview write-up of the feature along with before/after images.
-* Performance impact of the feature.
-* If you did something to accelerate the feature, what did you do and why?
-* Compare your GPU version of the feature to a HYPOTHETICAL CPU version (you don't have to implement it!). Does it benefit or suffer from being implemented on the GPU?
-* How might this feature be optimized beyond your current implementation?
-```
-
 ## Performance Analysis
 
 ### Hypothesis
