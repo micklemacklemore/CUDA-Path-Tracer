@@ -1,12 +1,14 @@
 CUDA Path Tracer
 ================
 
+[Hero Image Here]
+
+## Overview
+
 > University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 1 - Flocking
 > * Michael Mason
 >   + [Personal Website](https://www.michaelmason.xyz/)
 > * Tested on: Windows 11, Ryzen 9 5900HS @ 3.00GHz 16GB, RTX 3080 (Laptop) 8192MB 
-
-## Overview
 
 This is a Path Tracing Renderer (i.e. Arnold, RenderMan, V-Ray) written in C++ and CUDA which utilizes GPU hardware. This is an interactive renderer! It supports basic materials and scene handling, including glTF support, color & normal textures, and more! See below. 
 
@@ -18,9 +20,10 @@ Supported Features:
 * Depth of field
 * Open Image Denoiser intergration
 * Physically-Based Materials (BxDFs)
-  * Matte (Perfect Diffuse)
-  * Mirror (Perfect Specular)
-  * Glass (Specular Reflection + Transmission + Fresnel)
+  * Matte (Perfect Diffuse BRDF)
+  * Mirror (Perfect Specular BRDF)
+  * Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
+  * Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
 
 ## Feature Descriptions
 
@@ -32,13 +35,17 @@ Scenes in this renderer are described with a basic JSON schema that can specify 
 
 One node / one mesh glTF files can be loaded, so long as they contain the appropriate vertex attributes: positions, normals and texture coordinates (if textures are also included). 
 
-The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) was referenced for this feature and was of great help! 
+The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) was referenced for this feature and was of great help!
+
+[Image Here]
 
 #### Albedo and Normal Maps
 
 With the glTF format, albedo and normal map textures are renderable and supported. 
 
 Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU `here`, which can later be accessed by CUDA kernels `here` (Similar to an OpenGL Sampler2D). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
+
+[Image Here]
 
 ### Intel Open Image Denoise
 
@@ -48,9 +55,9 @@ An image that would typically take 10,000 samples to render can be done in merel
 
 To denoise rendered images, the API is fairly straightforward. The denoiser accepts 32-bit floating point channels by default and you can see how it's used `here`. 
 
-[Image Here]
-
 For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
+
+[Image Here]
 
 ### Materials (BxDF's)
 
@@ -58,7 +65,15 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 
 #### Perfect Diffuse BRDF & Perfect Specular BRDF
 
-#### Glass (Specular Fresnel BSDF)
+[Image Here]
+
+#### Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
+
+[Image Here]
+
+#### Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
+
+[Image Here]
 
 ### Depth of Field
 
@@ -120,34 +135,16 @@ The first scenario will never occur in closed scenes, as eventually a ray will a
 
 ### Method
 
-The test scenes are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed).
+To test both optimizations fairly, four test scenes were created and are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed).
 
-Light Open Scene (Open Cornell Box)
-Heavy Open Scene (Open Cornell Box with lots of meshes)
 
-Light Closed Scene (Closed Cornell Box)
-Heavy Closed Scene (Closed Cornell Box with lots of meshes)
+Light Open Scene (Open Cornell Box)<br>
+Heavy Open Scene (Open Cornell Box with complex geometry)
+
+Light Closed Scene (Closed Cornell Box) <br>
+Heavy Closed Scene (Closed Cornell Box with complex geometry)
 
 ### Results
-
-```md
-TODO
-====
-
-Stream compaction helps most after a few bounces. Print and plot the effects of stream compaction within a single iteration (i.e. the number of unterminated rays after each bounce) and evaluate the benefits you get from stream compaction.
-
-~~~
-
-Compare scenes which are open (like the given cornell box) and closed (i.e. no light can escape the scene). Again, compare the performance effects of stream compaction! Remember, stream compaction only affects rays which terminate, so what might you expect?
-
-~~~
-
-For optimizations that target specific kernels, we recommend using stacked bar graphs to convey total execution time and improvements in individual kernels. For example:
-
-  ![Clearly the Macchiato is optimal.](img/stacked_bar_graph.png)
-
-Timings from NSight should be very useful for generating these kinds of charts.
-```
 
 ## References
 
