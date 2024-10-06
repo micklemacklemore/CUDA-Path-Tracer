@@ -144,13 +144,13 @@ To test both optimizations fairly, four test scenes were created and are categor
 * Light Closed Scene (Closed Cornell Box implicit spheres)
 * Heavy Closed Scene (Closed Cornell Box with 5k poly geometry)
 
-<p style="text-align: center;">
+<p align="center">
 <img src="img/lightscene.png" width=400px> 
 <img src="img/heavyscene.png" width=400px>
 </p>
 
-<p style="text-align: center;">
-<i>Light Open Scene (left) and Heavy Open Scene (right). Closed versions of these scenes are the same, but contain a fourth wall. </i>
+<p align="center">
+<i>Light Open Scene (left) and Heavy Open Scene (right). Closed versions of these scenes are the same, but contain a fourth wall.</i>
 </p>
 
 ### Results
