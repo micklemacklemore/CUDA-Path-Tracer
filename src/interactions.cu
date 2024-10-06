@@ -44,6 +44,7 @@ __device__ glm::vec3 squareToHemisphereCosine(glm::vec2 xi) {
 * 
 * - Only sampling visible area.
 * - Assuming an isotropic material (alpha.x == alpha.y)
+*   + although I tried "sampling the visible area" and I failed
 */
 
 __device__ float SinTheta(const glm::vec3& w) {
@@ -161,11 +162,33 @@ __device__ glm::vec3 TrowbridgeReitzSample(const glm::vec3& wi, float alpha, flo
 }
 
 __device__ glm::vec3 TrowbridgeReitz_Sample_wh(const glm::vec3& wo, const glm::vec2& xi, float alpha) {
+// code for sampling visible area didn't seem to work...
+#ifdef SAMPLE_VISIBLE_AREA 
   bool flip = wo.z < 0.f;
   glm::vec3 wh = TrowbridgeReitzSample(flip ? -wo : wo, alpha, xi.x, xi.y);
   if (flip) wh = -wh;
 
-  return wh; 
+  return wh;
+#else
+  glm::vec3 wh;
+
+  float cosTheta = 0;
+  float phi = TWO_PI * xi[1];
+  // We'll only handle isotropic microfacet materials
+  float tanTheta2 = alpha * alpha * xi[0] / (1.0f - xi[0]);
+  cosTheta = 1 / sqrt(1 + tanTheta2);
+
+  float sinTheta =
+    sqrtf(fmaxf(0.f, 1.f - cosTheta * cosTheta));
+
+  wh = glm::vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+
+  if (!(wo.z * wh.z > 0)) {
+    wh = -wh;
+  }
+
+  return wh;
+#endif
 }
 
 __device__ float TrowbridgeReitz_pdf(const glm::vec3& wo, const glm::vec3& wh, float alpha) {
@@ -272,6 +295,12 @@ __device__ void scatterRay(
     normal = glm::normalize(localToWorld(intersection.surfaceNormal, normal));
   }
 
+  float fresnelTerm; 
+  {
+    glm::vec3 wo = worldToLocal(normal, -pathSegment.ray.direction);
+    fresnelTerm = fresnelDielectric(wo.z, 1.5f, 1.f);
+  }
+
   if (m.emittance > 0.0f) {                             // EMISSION
     pathSegment.color *= (m.color * m.emittance);
     pathSegment.isFinished = true;
@@ -349,7 +378,9 @@ __device__ void scatterRay(
     glm::vec3 wi;
     glm::vec3 bsdfValue;
 
-    float alpha = TrowbridgeReitz_RoughnessToAlpha(m.roughness); 
+    //float alpha = TrowbridgeReitz_RoughnessToAlpha(m.roughness);   // why isn't this used? 
+    float alpha = glm::clamp(m.roughness, 0.01f, 1.f); 
+    alpha *= alpha; 
 
     // --------- get the wh, wi and pdf - sample_f() -------------
 
@@ -401,7 +432,8 @@ __device__ void scatterRay(
 
     wh = glm::normalize(wh);
 
-    glm::vec3 F(fresnelDielectric(glm::dot(wi, faceForward(wh, glm::vec3(0.f, 0.f, 1.f))), 1.5f, 1.0f)); 
+    // glm::vec3 F(fresnelDielectric(glm::dot(wi, faceForward(wh, glm::vec3(0.f, 0.f, 1.f))), 1.5f, 1.0f)); 
+    glm::vec3 F(1.f); 
 
     bsdfValue = (m.color * TrowbridgeReitz_D(wh, alpha) * TrowbridgeReitz_G(wo, wi, alpha) * F) / (4.f * cosThetaI * cosThetaO); 
 
@@ -411,7 +443,7 @@ __device__ void scatterRay(
     wi = glm::normalize(localToWorld(intersection.surfaceNormal, wi));
 
     // update throughput
-    pathSegment.color *= bsdfValue * glm::abs(glm::dot(wi, normal)) / pdf;
+    pathSegment.color *= bsdfValue / pdf;
     pathSegment.color = glm::clamp(pathSegment.color, 0.f, 1.f);
 
     // new ray for the next bounce
@@ -421,7 +453,7 @@ __device__ void scatterRay(
 
     --pathSegment.remainingBounces;
   }
-  else {                                                // PERFECT DIFFUSE REFLECTION
+  else {            // PERFECT DIFFUSE REFLECTION
     // generate random direction in hemisphere
     glm::vec3 wi = squareToHemisphereCosine(xi);
 

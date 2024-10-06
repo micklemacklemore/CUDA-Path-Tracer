@@ -26,7 +26,7 @@
         {
             "TYPE":"MicrofacetReflection",
             "RGB":[0.98, 0.98, 0.98],
-            "ROUGHNESS":0.1
+            "ROUGHNESS":0.4
         }
     },
     "Camera":
