@@ -135,7 +135,7 @@ The first scenario will never occur in closed scenes, as eventually a ray will a
 
 ### Method
 
-To test both optimizations fairly, four test scenes were created and are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed).
+To test both optimizations fairly, four test scenes were created and are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed):
 
 
 * Light Open Scene (Open Cornell Box with implicit spheres) 
@@ -143,6 +143,10 @@ To test both optimizations fairly, four test scenes were created and are categor
 
 * Light Closed Scene (Closed Cornell Box implicit spheres)
 * Heavy Closed Scene (Closed Cornell Box with 5k poly geometry)
+
+With these scenes, the average application
+
+> 📃 ***Note:*** I was fairly limited on what I could pick as a "heavy" scene. Using polygonal geometry beyond 10,000 triangles slows the renderer down to a point where any optimization changes appear negligable. This could have been helped by implementing an accelleration structure for polygon meshes such as BVH.   
 
 <p align="center">
 <img src="img/lightscene.png" width=400px> 
@@ -154,6 +158,65 @@ To test both optimizations fairly, four test scenes were created and are categor
 </p>
 
 ### Results
+
+#### Stream Compaction
+
+Overall, it was found that stream compaction had a decent improvement across all scenes, and surprisingly this was also the case for closed scenes as well. 
+
+The most signicant improvements were seen on the heavy scenes in particularly. For the Open Scene (heavy), there 30% decrease in framerate with stream compaction turned on. 
+
+Somewhat unexpectedly, it also appears that the Closed Scene (heavy) experienced a ~11% decrease in framerate. The reason for this, is that even in closed scenes, there are still situations where the PathSegment may terminate early. This is explained and shown in the next section. 
+
+The only scene that didn't experience a performance improvement is Closed Scene (light). It's likely that in this case, the overhead of sorting and removing terminated PathSegment exceeds the computation costs of a small scene that is likely not to have any of it's PathSegments terminated per bounce. 
+
+> 📃 ***Note:*** Milliseconds/Frame represents the average time per frame for the first 120 frames that the application was running. This how ImGui outputs *per-frame* timing data by default. [See Here](https://github.com/ocornut/imgui/discussions/4138).
+
+<p align="center">
+<img src="img/graph1.png">
+</p>
+
+<p align="center">
+<i>Lower is Better.</i>
+</p>
+
+##### Has Advantages For Closed Scenes
+
+To further understand why stream compaction might be advantageous for closed scenes, the number of unterminated PathSegments were compared for each bounce in a single iteration. In both Open Scene (light) and Open Scene (heavy) we can see a decrease in the number of unterminated PathSegments, and this is expected. 
+
+However, Closed Scene (heavy) was added to illustrate that a very small number of PathSegments (in this case, only one) can be terminated in a closed scene. It was further investigated that on average, Closed Scenes may terminate 1-3 PathSegments per iteration. 
+
+<p align="center">
+<img src="img/graph3.png">
+</p>
+<p align="center">
+<i>Lower is Better.</i>
+</p>
+
+In `interactions.cu`, the `scatterRay` device function calculates the BRDF's for each Intersection.  
+
+In some BRDF's, i.e perfectly diffuse, there are cases when the returned BRDF samples and PDF values are either miniscule or `NaN`. In these cases, the path is terminated entirely and the sample isn't considered. This avoids final colors in the final image that may be massively large or small (i.e. a [common result of this are fireflies](https://en.wikipedia.org/wiki/Fireflies_(computer_graphics))). 
+
+```c++
+if (pdf < EPSILON || isnan(pdf)) {
+  pathSegment.isTerminated = true;
+  return;
+}
+```
+
+Even though this may happen only 1-3 times per iteration, I suppose those few early terminations accumulate over time and therefore the improvement in performance is significant. 
+
+#### Material Sorting
+
+It turns out that material sorting was a fairly insignificant optimization. In smaller scenes, it appears that the overhead of performing a sort for each bounce outweigh's the potential SIMT coherency benefits of sorted kernel calls. In the smaller Open Scene (light), Material Sorting increased framerates about 3 times versus having the optimization turned off. 
+
+For heavier scenes, it does see some performance gain, however the the performance increase (about 7%) was quite small and may be a negligable difference. 
+
+<p align="center">
+<img src="img/graph2.png">
+</p>
+<p align="center">
+<i>Lower is Better.</i>
+</p>
 
 ## References
 
