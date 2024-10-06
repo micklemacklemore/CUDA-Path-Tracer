@@ -138,11 +138,20 @@ The first scenario will never occur in closed scenes, as eventually a ray will a
 To test both optimizations fairly, four test scenes were created and are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed).
 
 
-Light Open Scene (Open Cornell Box)<br>
-Heavy Open Scene (Open Cornell Box with complex geometry)
+* Light Open Scene (Open Cornell Box with implicit spheres) 
+* Heavy Open Scene (Open Cornell Box with 5k poly geometry) 
 
-Light Closed Scene (Closed Cornell Box) <br>
-Heavy Closed Scene (Closed Cornell Box with complex geometry)
+* Light Closed Scene (Closed Cornell Box implicit spheres)
+* Heavy Closed Scene (Closed Cornell Box with 5k poly geometry)
+
+<p style="text-align: center;">
+<img src="img/lightscene.png" width=400px> 
+<img src="img/heavyscene.png" width=400px>
+</p>
+
+<p style="text-align: center;">
+<i>Light Open Scene (left) and Heavy Open Scene (right). Closed versions of these scenes are the same, but contain a fourth wall. </i>
+</p>
 
 ### Results
 

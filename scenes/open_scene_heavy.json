@@ -12,6 +12,16 @@
             "TYPE":"Diffuse",
             "RGB":[0.98, 0.98, 0.98]
         },
+        "duck_body":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "duck_beak":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.8, 0.26, 0.05]
+        },
         "diffuse_red":
         {
             "TYPE":"Diffuse",
@@ -54,34 +64,6 @@
     "Objects":
     [
         {
-            "TYPE":"sphere",
-            "MATERIAL":"transmission_white",
-            "TRANS":[-8.0,13.22,-1.4],
-            "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[16.0,16.0,16.0]
-        },
-        {
-            "TYPE":"sphere",
-            "MATERIAL":"specular_white",
-            "TRANS":[5.2,6.9,-1.2],
-            "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[8.7,8.7,8.7]
-        },
-        {
-            "TYPE":"sphere",
-            "MATERIAL":"specular_white",
-            "TRANS":[14.8,6.4,-4.8],
-            "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[5.7,5.7,5.7]
-        },
-        {
-            "TYPE":"sphere",
-            "MATERIAL":"specular_white",
-            "TRANS":[10.3,14.8,-9.7],
-            "ROTAT":[0.0,0.0,0.0],
-            "SCALE":[4.1,4.1,4.1]
-        },
-        {
             "TYPE":"mesh",
             "PATH": "geometry\\open_box\\back.gltf",
             "MATERIAL": "default_textured",
@@ -117,6 +99,22 @@
             "TYPE":"mesh",
             "PATH": "geometry\\open_box\\right.gltf",
             "MATERIAL": "diffuse_green",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\open_box\\duck_body.gltf",
+            "MATERIAL": "duck_body",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\open_box\\duck_beak.gltf",
+            "MATERIAL": "duck_beak",
             "TRANS":[0.0, 0.0, 0.0],
             "ROTAT":[0.0, 0.0, 0.0],
             "SCALE":[1.00, 1.00, 1.00]
