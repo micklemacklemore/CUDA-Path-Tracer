@@ -1,7 +1,7 @@
+<img src="img/hero.png">
+
 CUDA Path Tracer
 ================
-
-[Hero Image Here]
 
 ## Overview
 
@@ -37,7 +37,14 @@ One node / one mesh glTF files can be loaded, so long as they contain the approp
 
 The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) was referenced for this feature and was of great help!
 
-[Image Here]
+<p align="center">
+<img src="img/gltf1.png" width=500px>
+</p>
+
+<p align="center">
+<i>Duck Floatie & Crash Bandicoot Boxes</i>
+</p>
+
 
 #### Albedo and Normal Maps
 
@@ -45,7 +52,14 @@ With the glTF format, albedo and normal map textures are renderable and supporte
 
 Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU `here`, which can later be accessed by CUDA kernels `here` (Similar to an OpenGL Sampler2D). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
 
-[Image Here]
+<p align="center">
+<img src="img/gltf2.png" width=450px>
+<img src="img/gltf3.png" width=450px>
+</p>
+
+<p align="center">
+<i>Albedo Pass, Surface Normal Pass</i>
+</p>
 
 ### Intel Open Image Denoise
 
@@ -72,6 +86,8 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 [Image Here]
 
 #### Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
+
+> 🗨️ ***Comment:*** Seems to work okay with the implicit shapes, but when applied to meshes with normals, it seems to come with weird artifacts. As far as I know I pretty much ripped it straight out of `PBRTv3`, so I'm not sure where I went wrong!
 
 [Image Here]
 

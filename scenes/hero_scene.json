@@ -1,0 +1,123 @@
+{
+    "Materials":
+    {
+        "light_cool":
+        {
+            "TYPE":"Emitting",
+            "RGB":[1.0, 0.93, 0.88],
+            "EMITTANCE":3.0
+        },
+        "default_textured":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "default":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "specular_white":
+        {
+            "TYPE":"Specular",
+            "RGB":[0.98, 0.98, 0.98],
+            "ROUGHNESS":0.0
+        },
+        "transmission_white":
+        {
+            "TYPE":"Transmission",
+            "RGB":[0.98, 0.98, 0.98],
+            "ROUGHNESS":0.0
+        },
+        "box1":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "box2":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "box3":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98]
+        },
+        "teapot":
+        {
+            "TYPE":"Diffuse",
+            "RGB":[0.98, 0.98, 0.98],
+            "ROUGHNESS":0.7
+        }
+    },
+    "Camera":
+    {
+        "RES":[1600,800],
+        "FOVY":45.0,
+        "ITERATIONS":5000,
+        "DEPTH":8,
+        "FILE":"open_light_scene",
+        "EYE":[0.0,-0.0,30.5],
+        "LOOKAT":[0.0,8.0,0.0],
+        "UP":[0.0,1.0,0.0]
+    },
+    "Objects":
+    [
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\backdrop.gltf",
+            "MATERIAL": "default_textured",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\freeman.gltf",
+            "MATERIAL": "transmission_white",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\box1.gltf",
+            "MATERIAL": "box1",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\box2.gltf",
+            "MATERIAL": "box2",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\box3.gltf",
+            "MATERIAL": "box3",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        },
+        {
+            "TYPE":"cube",
+            "MATERIAL":"light_cool",
+            "TRANS":[0.0,50.0,0.0],
+            "ROTAT":[0.0,0.0,90.0],
+            "SCALE":[0.01,50.0,50.0]
+        },
+        {
+            "TYPE":"mesh",
+            "PATH": "geometry\\hero_scene\\teapot.gltf",
+            "MATERIAL": "teapot",
+            "TRANS":[0.0, 0.0, 0.0],
+            "ROTAT":[0.0, 0.0, 0.0],
+            "SCALE":[1.00, 1.00, 1.00]
+        }
+    ]
+}
