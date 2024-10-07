@@ -254,4 +254,7 @@ For heavier scenes, it does see some performance gain, however the the performan
 
 ## References
 
-
+"duck floaty" (https://skfb.ly/o8Mor) by raholder0909 is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+"Teapot 2 (draft)" (https://skfb.ly/6VYIo) by MrsM is licensed under Creative Commons Attribution-NonCommercial (http://creativecommons.org/licenses/by-nc/4.0/).
+"Crash Bandicoot Crates" (https://skfb.ly/otww6) by diabeticspoon92 is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+"Gordon Freeman mosaic" (https://skfb.ly/oCE8R) by Evgeniy P is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
