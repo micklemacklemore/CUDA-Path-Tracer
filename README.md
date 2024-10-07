@@ -3,16 +3,16 @@
 CUDA Path Tracer
 ================
 
-## Overview
+## 🚀 Overview
 
-> University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 1 - Flocking
+> University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Project 3 - CUDA Path Tracer
 > * Michael Mason
 >   + [Personal Website](https://www.michaelmason.xyz/)
 > * Tested on: Windows 11, Ryzen 9 5900HS @ 3.00GHz 16GB, RTX 3080 (Laptop) 8192MB 
 
 This is a Path Tracing Renderer (i.e. Arnold, RenderMan, V-Ray) written in C++ and CUDA which utilizes GPU hardware. This is an interactive renderer! It supports basic materials and scene handling, including glTF support, color & normal textures, and more! See below. 
 
-Supported Features: 
+### Supported Features
 
 * glTF File Format
 * Albedo Maps
@@ -25,7 +25,7 @@ Supported Features:
   * Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
   * Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
 
-## Feature Descriptions
+## ✨ Feature Descriptions
 
 ### Scene Description and Loading 
 
@@ -118,9 +118,9 @@ I found [this blog article](https://pathtracing.home.blog/depth-of-field/) which
 <img src="img/bokeh.png">
 </p>
 
-## Performance Analysis
+## 📝 Performance Analysis
 
-### Hypothesis
+### ❔ Hypothesis
 
 In this performance analysis we'll be testing two significant GPGPU optimizations made to the path tracer to boost performance: *Stream Compaction* and *Material Sorting*. It's beneficial to explain some of the code base to understand what these optimizations will do for us. 
 
@@ -172,7 +172,7 @@ The first scenario will never occur in closed scenes, as eventually a ray will a
 
 **Material Sorting** simply sorts both `PathSegments` and `ShadeableIntersections` by their material type. `ShadeableIntersections` store the material information and so it is used as a key in `thrust::sort_by_key`. If there is a considerable number of materials and a high number of non-terminated paths, this could have a considerable performance boost. 
 
-### Method
+### 🧪 Method
 
 To test both optimizations fairly, four test scenes were created and are categorized based on two primary factors: the *geometry complexity* and the *environment type* (open vs. closed):
 
@@ -196,7 +196,7 @@ With these scenes, the average application
 <i>Light Open Scene (left) and Heavy Open Scene (right). Closed versions of these scenes are the same, but contain a fourth wall.</i>
 </p>
 
-### Results
+### 📊 Results
 
 #### Stream Compaction
 
