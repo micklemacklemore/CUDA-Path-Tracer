@@ -71,7 +71,14 @@ To denoise rendered images, the API is fairly straightforward. The denoiser acce
 
 For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
 
-[Image Here]
+<p align="center">
+<img src="img/denoise1.png" width=450px>
+<img src="img/denoise2.png" width=450px>
+</p>
+
+<p align="center">
+<i>Before & After Denoising</i>
+</p>
 
 ### Materials (BxDF's)
 
@@ -79,21 +86,32 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 
 #### Perfect Diffuse BRDF & Perfect Specular BRDF
 
-[Image Here]
+<p align="center">
+<img src="img/diffuse.png" width=450px>
+<img src="img/lightscene.png" width=450px>
+</p>
 
 #### Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
 
-[Image Here]
+<p align="center">
+<img src="img/glass.png" width=450px>
+</p>
 
 #### Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
 
 > 🗨️ ***Comment:*** Seems to work okay with the implicit shapes, but when applied to meshes with normals, it seems to come with weird artifacts. As far as I know I pretty much ripped it straight out of `PBRTv3`, so I'm not sure where I went wrong!
 
-[Image Here]
+<p align="center">
+<img src="img/specular.png" width=450px>
+</p>
 
 ### Depth of Field
 
 I found [this blog article](https://pathtracing.home.blog/depth-of-field/) which was used for reference and implementation. Producing depth of field (in layman's terms, ['bokeh' in a photograph](https://www.dropicts.com/how-to-achieve-stunning-bokeh-effect-in-your-photo/)) is done by picking a focal point along a generated ray, and jittering it's origin in the xy directions within an aperture. The focal point is the point along the ray where things will be in focus. Increasing the size of your aperture increases the "blur" effect. 
+
+<p align="center">
+<img src="img/bokeh.png" width=450px>
+</p>
 
 ## Performance Analysis
 
