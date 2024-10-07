@@ -53,8 +53,8 @@ With the glTF format, albedo and normal map textures are renderable and supporte
 Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU `here`, which can later be accessed by CUDA kernels `here` (Similar to an OpenGL Sampler2D). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
 
 <p align="center">
-<img src="img/gltf2.png" width=450px>
-<img src="img/gltf3.png" width=450px>
+<img src="img/gltf2.png" width=400px>
+<img src="img/gltf3.png" width=400px>
 </p>
 
 <p align="center">
@@ -72,8 +72,8 @@ To denoise rendered images, the API is fairly straightforward. The denoiser acce
 For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
 
 <p align="center">
-<img src="img/denoise1.png" width=450px>
-<img src="img/denoise2.png" width=450px>
+<img src="img/denoise1.png" width=400px>
+<img src="img/denoise2.png" width=400px>
 </p>
 
 <p align="center">
@@ -87,14 +87,14 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 #### Perfect Diffuse BRDF & Perfect Specular BRDF
 
 <p align="center">
-<img src="img/diffuse.png" width=450px>
-<img src="img/lightscene.png" width=450px>
+<img src="img/diffuse.png" width=400px>
+<img src="img/lightscene.png" width=400px>
 </p>
 
 #### Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
 
 <p align="center">
-<img src="img/glass.png" width=450px>
+<img src="img/glass.png">
 </p>
 
 #### Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
@@ -102,7 +102,7 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 > 🗨️ ***Comment:*** Seems to work okay with the implicit shapes, but when applied to meshes with normals, it seems to come with weird artifacts. As far as I know I pretty much ripped it straight out of `PBRTv3`, so I'm not sure where I went wrong!
 
 <p align="center">
-<img src="img/specular.png" width=450px>
+<img src="img/specular.png">
 </p>
 
 ### Depth of Field
@@ -110,7 +110,7 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 I found [this blog article](https://pathtracing.home.blog/depth-of-field/) which was used for reference and implementation. Producing depth of field (in layman's terms, ['bokeh' in a photograph](https://www.dropicts.com/how-to-achieve-stunning-bokeh-effect-in-your-photo/)) is done by picking a focal point along a generated ray, and jittering it's origin in the xy directions within an aperture. The focal point is the point along the ray where things will be in focus. Increasing the size of your aperture increases the "blur" effect. 
 
 <p align="center">
-<img src="img/bokeh.png" width=450px>
+<img src="img/bokeh.png">
 </p>
 
 ## Performance Analysis
