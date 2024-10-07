@@ -94,7 +94,12 @@ This renderer supports basic Bidirectional Scattering Distribution Function (BSD
 #### Glass (Specular Reflection BRDF + Specular Transmission BTDF, mixed by fresnel)
 
 <p align="center">
-<img src="img/glass.png">
+<img src="img/glass.png" width=500px>
+<img src="https://github.com/user-attachments/assets/0b3022c8-2827-43e6-a899-144d44b3556b" width=500px>
+</p>
+
+<p align="center">
+<i>Follow Freeman!</i>
 </p>
 
 #### Brushed Metal (Torrance-Sparrow Microfacet BRDF Model with a Trowbridge-Reitz Distribution)
