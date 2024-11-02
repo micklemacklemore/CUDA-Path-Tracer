@@ -50,7 +50,7 @@ The [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.
 
 With the glTF format, albedo and normal map textures are renderable and supported. 
 
-Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU `here`, which can later be accessed by CUDA kernels `here` (Similar to an OpenGL Sampler2D). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
+Textures are implemented in CUDA using the `CUDA Texture Object API`. You can see how textures can be loaded into the GPU [here](https://github.com/micklemacklemore/CUDA-Path-Tracer/blob/main/src/pathtrace.cu#L126-L169), which can later be accessed by CUDA kernels [here](https://github.com/micklemacklemore/CUDA-Path-Tracer/blob/main/src/interactions.cu#L286-L296) (It's similar to `texture2D` when accessing a sampler in glsl). It's straighforward to use, however the documentation is sparse. I hope this might be another simple example on the internet to help another budding graphics student. 
 
 <p align="center">
 <img src="img/gltf2.png" width=400px>
