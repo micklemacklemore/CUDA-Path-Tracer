@@ -67,7 +67,7 @@ Intel Open Image Denoise is a high-performance open-source library for image noi
 
 An image that would typically take 10,000 samples to render can be done in merely half the time, with potentially cleaner results. 
 
-To denoise rendered images, the API is fairly straightforward. The denoiser accepts 32-bit floating point channels by default and you can see how it's used `here`. 
+To denoise rendered images, the API is fairly straightforward. The denoiser accepts 32-bit floating point channels by default and you can see how it's used [here](https://github.com/micklemacklemore/CUDA-Path-Tracer/blob/main/src/pathtrace.cu#L625-L659). 
 
 For information, go to the [OIDN homepage](https://www.openimagedenoise.org/).
 
